@@ -22,6 +22,8 @@ const SYNTH_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 const TTS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
 const STREAMING = process.env.VELMA_STREAMING !== '0'; // default ON here
+const recentLogs = [];
+function logEvent(m){ try{ recentLogs.push(new Date().toISOString()+' '+m); if(recentLogs.length>40) recentLogs.shift(); console.log(m); }catch(e){} }
 const CT_UUID = 'a1b2c3d4-1111-4111-8111-000000000001';
 const ROLE_UUID = 'b2c3d4e5-2222-4222-8222-000000000001';
 
@@ -191,6 +193,7 @@ async function synthesize(turns) {
 app.get('/api/analyze', async (req, res) => {
   // Diagnostic: probe Velma with a tiny silent file using both configs, so we can see
   // exactly why a real request fails (config rejected, no credits, bad key, etc.).
+  if (req.query.log) { res.json({ count: recentLogs.length, logs: recentLogs }); return; }
   if (req.query.diag) {
     const key = process.env.MODULATE_API_KEY;
     if (!key) { res.json({ diag: true, velmaKey: false }); return; }
@@ -223,11 +226,11 @@ app.get('/api/analyze', async (req, res) => {
 app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async (req, res) => {
   const t0 = Date.now();
   const key = process.env.MODULATE_API_KEY;
-  if (!key) { console.log('[analyze] no MODULATE_API_KEY'); res.json({ configured: false }); return; }
+  if (!key) { logEvent('[analyze] no MODULATE_API_KEY'); res.json({ configured: false }); return; }
   const audio = req.body;
   const contentType = req.headers['content-type'] || 'audio/webm';
-  console.log('[analyze] in bytes=' + (audio && audio.length ? audio.length : 0) + ' ct=' + contentType + ' streaming=' + STREAMING);
-  if (!audio || !audio.length || !Buffer.isBuffer(audio)) { console.log('[analyze] empty/invalid audio body'); res.status(400).json({ error: 'no_audio' }); return; }
+  logEvent('[analyze] in bytes=' + (audio && audio.length ? audio.length : 0) + ' ct=' + contentType + ' streaming=' + STREAMING);
+  if (!audio || !audio.length || !Buffer.isBuffer(audio)) { logEvent('[analyze] empty/invalid audio body'); res.status(400).json({ error: 'no_audio' }); return; }
   const cfg = velmaConfigObj();
   let velma;
   try {
@@ -236,7 +239,7 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
         velma = await velmaStreaming(audio, key, cfg);
         if (!velma.clips || !velma.clips.length) throw new Error('stream_no_clips');
       } catch (se) {
-        console.log('[analyze] stream failed -> batch: ' + String((se && se.message) || se));
+        logEvent('[analyze] stream failed -> batch: ' + String((se && se.message) || se));
         velma = await velmaBatch(audio, contentType, key, cfg);
         velma.__stream_fallback = String((se && se.message) || se);
       }
@@ -244,14 +247,14 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
       velma = await velmaBatch(audio, contentType, key, cfg);
     }
   } catch (ve) {
-    console.error('[analyze] velma_failed: ' + String((ve && ve.message) || ve));
+    logEvent('[analyze] velma_failed: ' + String((ve && ve.message) || ve));
     res.status(502).json({ error: 'velma_failed', detail: String((ve && ve.message) || ve) });
     return;
   }
-  console.log('[analyze] velma ok source=' + velma.__source + ' clips=' + ((velma.clips || []).length) + ' ' + (Date.now() - t0) + 'ms');
+  logEvent('[analyze] velma ok source=' + velma.__source + ' clips=' + ((velma.clips || []).length) + ' ' + (Date.now() - t0) + 'ms');
   let interpreted = null, interpErr;
   if (process.env.ANTHROPIC_API_KEY) {
-    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); console.log('[analyze] interpret error: ' + interpErr); }
+    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); logEvent('[analyze] interpret error: ' + interpErr); }
   }
   res.json({ configured: true, velma, interpreted, interpErr });
 });
