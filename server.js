@@ -221,11 +221,13 @@ app.get('/api/analyze', async (req, res) => {
 });
 
 app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async (req, res) => {
+  const t0 = Date.now();
   const key = process.env.MODULATE_API_KEY;
-  if (!key) { res.json({ configured: false }); return; }
+  if (!key) { console.log('[analyze] no MODULATE_API_KEY'); res.json({ configured: false }); return; }
   const audio = req.body;
-  if (!audio || !audio.length) { res.status(400).json({ error: 'no_audio' }); return; }
   const contentType = req.headers['content-type'] || 'audio/webm';
+  console.log('[analyze] in bytes=' + (audio && audio.length ? audio.length : 0) + ' ct=' + contentType + ' streaming=' + STREAMING);
+  if (!audio || !audio.length || !Buffer.isBuffer(audio)) { console.log('[analyze] empty/invalid audio body'); res.status(400).json({ error: 'no_audio' }); return; }
   const cfg = velmaConfigObj();
   let velma;
   try {
@@ -234,6 +236,7 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
         velma = await velmaStreaming(audio, key, cfg);
         if (!velma.clips || !velma.clips.length) throw new Error('stream_no_clips');
       } catch (se) {
+        console.log('[analyze] stream failed -> batch: ' + String((se && se.message) || se));
         velma = await velmaBatch(audio, contentType, key, cfg);
         velma.__stream_fallback = String((se && se.message) || se);
       }
@@ -241,12 +244,14 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
       velma = await velmaBatch(audio, contentType, key, cfg);
     }
   } catch (ve) {
+    console.error('[analyze] velma_failed: ' + String((ve && ve.message) || ve));
     res.status(502).json({ error: 'velma_failed', detail: String((ve && ve.message) || ve) });
     return;
   }
+  console.log('[analyze] velma ok source=' + velma.__source + ' clips=' + ((velma.clips || []).length) + ' ' + (Date.now() - t0) + 'ms');
   let interpreted = null, interpErr;
   if (process.env.ANTHROPIC_API_KEY) {
-    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); }
+    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); console.log('[analyze] interpret error: ' + interpErr); }
   }
   res.json({ configured: true, velma, interpreted, interpErr });
 });
