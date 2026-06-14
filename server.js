@@ -81,16 +81,40 @@ function velmaStreaming(audio, key, cfg) {
   });
 }
 
-async function velmaBatch(audio, contentType, key, cfg) {
+async function postBatch(audio, contentType, key, config) {
   const form = new FormData();
   form.append('upload_file', new Blob([audio], { type: contentType }), 'reply.webm');
-  form.append('config', JSON.stringify(cfg));
-  const r = await fetch(VELMA_BATCH, { method: 'POST', headers: { 'X-API-Key': key }, body: form });
+  form.append('config', JSON.stringify(config));
+  return fetch(VELMA_BATCH, { method: 'POST', headers: { 'X-API-Key': key }, body: form });
+}
+
+async function velmaBatch(audio, contentType, key, cfg) {
+  let r = await postBatch(audio, contentType, key, cfg);
+  // If the richer config (custom conversation type) is rejected, self-heal with the
+  // minimal emotion-only config so the read still works.
+  if (r.status === 422) r = await postBatch(audio, contentType, key, { stt: { emotion_signal: true } });
   const text = await r.text();
   if (!r.ok) throw new Error('velma_' + r.status + ': ' + text.slice(0, 300));
   let velma; try { velma = JSON.parse(text); } catch (e) { velma = { raw: text }; }
   velma.__source = 'batch';
   return velma;
+}
+
+// Builds a tiny silent WAV so the diagnostic can probe Velma without real audio.
+function makeSilentWav(seconds = 1, rate = 16000) {
+  const n = seconds * rate, dataLen = n * 2, buf = Buffer.alloc(44 + dataLen);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + dataLen, 4); buf.write('WAVE', 8);
+  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
+  buf.write('data', 36); buf.writeUInt32LE(dataLen, 40);
+  return buf;
+}
+async function batchProbe(audio, key, config) {
+  try {
+    const r = await postBatch(audio, 'audio/wav', key, config);
+    const body = (await r.text()).slice(0, 300);
+    return { status: r.status, ok: r.ok, body };
+  } catch (e) { return { error: String((e && e.message) || e) }; }
 }
 
 function extractJson(s) {
@@ -165,7 +189,18 @@ async function synthesize(turns) {
 }
 
 // ---- routes ----
-app.get('/api/analyze', (req, res) => {
+app.get('/api/analyze', async (req, res) => {
+  // Diagnostic: probe Velma with a tiny silent file using both configs, so we can see
+  // exactly why a real request fails (config rejected, no credits, bad key, etc.).
+  if (req.query.diag) {
+    const key = process.env.MODULATE_API_KEY;
+    if (!key) { res.json({ diag: true, velmaKey: false }); return; }
+    const wav = makeSilentWav(1);
+    const rich = await batchProbe(wav, key, velmaConfigObj());
+    const minimal = await batchProbe(wav, key, { stt: { emotion_signal: true } });
+    res.json({ diag: true, richConfig: rich, minimalConfig: minimal });
+    return;
+  }
   res.json({
     ok: true,
     velmaKey: !!process.env.MODULATE_API_KEY,
