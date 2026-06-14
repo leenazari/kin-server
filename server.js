@@ -1,290 +1,443 @@
-// First Dates — persistent Node server (for Railway).
-// Serves the front end and runs all three APIs. Unlike the serverless version,
-// this can hold a WebSocket open to Velma, so per-utterance streaming emotion works.
-//
-// Env vars: MODULATE_API_KEY (Velma), ANTHROPIC_API_KEY (Claude), ELEVENLABS_API_KEY (voice).
-// Optional: ANTHROPIC_MODEL, ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL, VELMA_STREAMING (set 0 to disable).
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>First Dates · Kin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+  :root{
+    --ink:#23201c;--ink-soft:#5b554d;--cream:#f6f1e7;--cream-2:#efe7d8;--paper:#fffdf8;
+    --accent:#b5532f;--accent-2:#2f6d6a;--gold:#c8943b;--line:#e2d8c5;--good:#2f6d6a;
+    --radius:18px;--shadow:0 18px 50px -24px rgba(40,30,15,.45);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif;background:radial-gradient(120% 120% at 50% 0%, #fbf7ee 0%, var(--cream) 55%, var(--cream-2) 100%);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .serif{font-family:'Fraunces',Georgia,serif;}
+  .wrap{max-width:560px;margin:0 auto;padding:26px 20px 70px;}
+  header.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:10px;}
+  .logo{font-family:'Fraunces',serif;font-weight:600;font-size:22px;letter-spacing:.04em;}
+  .logo small{display:block;font-family:'Inter';font-weight:500;letter-spacing:.2em;font-size:9px;color:var(--ink-soft);text-transform:uppercase;margin-top:3px;}
+  .rightctl{display:flex;gap:8px;align-items:center;}
+  .badge{font-size:11px;font-weight:600;letter-spacing:.04em;border-radius:999px;padding:6px 12px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer;}
+  .badge .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gold);margin-right:6px;vertical-align:middle;}
+  .badge.live .dot{background:var(--good);}
 
-import express from 'express';
-import WebSocket from 'ws';
-import { fileURLToPath } from 'url';
-import path from 'path';
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 26px;}
+  .kicker{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:12px;}
+  h1.t{font-family:'Fraunces',serif;font-weight:500;font-size:27px;line-height:1.16;margin:0 0 10px;}
+  p.body{font-size:15px;line-height:1.6;color:var(--ink-soft);margin:0 0 14px;}
+  .orb{width:84px;height:84px;border-radius:50%;position:relative;margin:0 auto 18px;background:radial-gradient(circle at 32% 30%, #7fb7b2, var(--accent-2) 60%, #1f4e4b 100%);box-shadow:0 0 0 8px rgba(47,109,106,.1), inset 0 0 16px rgba(255,255,255,.25);animation:breathe 4s ease-in-out infinite;}
+  .orb.live{animation:pulse 1.1s ease-in-out infinite;}
+  .orb.speaking{animation:pulse .7s ease-in-out infinite;}
+  .orb::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 65% 70%, rgba(255,255,255,.35), transparent 45%);}
+  @keyframes breathe{0%,100%{transform:scale(1);}50%{transform:scale(1.04);}}
+  @keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 8px rgba(181,83,47,.14), inset 0 0 16px rgba(255,255,255,.25);}50%{transform:scale(1.07);box-shadow:0 0 0 14px rgba(181,83,47,.05), inset 0 0 16px rgba(255,255,255,.25);}}
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-const PORT = process.env.PORT || 3000;
+  .prog{display:flex;gap:6px;justify-content:center;margin:0 0 16px;}
+  .prog span{width:26px;height:4px;border-radius:3px;background:var(--cream-2);}
+  .prog span.on{background:var(--accent);}
+  .prog span.done{background:var(--accent-2);}
 
-const VELMA_BATCH = 'https://modulate-developer-apis.com/api/velma-2-batch';
-const VELMA_STREAM = 'wss://modulate-developer-apis.com/api/velma-2-streaming';
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const READ_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
-const SYNTH_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-const TTS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
-const STREAMING = process.env.VELMA_STREAMING !== '0'; // default ON here
-const CT_UUID = 'a1b2c3d4-1111-4111-8111-000000000001';
-const ROLE_UUID = 'b2c3d4e5-2222-4222-8222-000000000001';
+  .speech{background:var(--cream);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:20px;}
+  .speech .who{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);font-weight:600;margin-bottom:6px;}
+  .speech p{margin:0;font-family:'Fraunces',serif;font-size:19px;line-height:1.34;}
 
-function velmaConfigObj() {
+  canvas#wave{width:100%;height:64px;display:block;margin:6px 0 14px;}
+  .timer{text-align:center;font-family:'Fraunces',serif;font-size:20px;color:var(--accent);margin-bottom:14px;}
+
+  .btn{cursor:pointer;border:none;border-radius:999px;padding:14px 26px;font-family:'Inter';font-size:15px;font-weight:600;transition:.16s;width:100%;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 12px 24px -12px rgba(181,83,47,.7);}
+  .btn-primary:hover{background:#9c4527;}
+  .btn-soft{background:var(--paper);color:var(--ink);border:1px solid var(--line);}
+  .btn-soft:hover{border-color:var(--ink-soft);}
+  .stack{display:flex;flex-direction:column;gap:11px;margin-top:18px;}
+  .micwrap{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .micbtn{width:78px;height:78px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 14px 30px -10px rgba(181,83,47,.7);transition:.15s;}
+  .micbtn:hover{transform:translateY(-2px);}
+  .micbtn.stop{background:#fff;border:3px solid var(--accent);}
+  .hint{font-size:12.5px;color:var(--ink-soft);text-align:center;}
+
+  .spin{width:34px;height:34px;border:3px solid var(--cream-2);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:8px auto 16px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:6px 13px;color:var(--ink);background:var(--cream);display:inline-flex;align-items:center;gap:7px;}
+  .chip .lvl{width:34px;height:5px;border-radius:3px;background:var(--cream-2);overflow:hidden;}
+  .chip .lvl i{display:block;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--gold));}
+  .sectlabel{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:20px 0 10px;}
+
+  .story{font-family:'Fraunces',serif;font-size:16.5px;line-height:1.55;color:var(--ink);}
+  .story b{font-weight:600;}
+
+  .profile{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:linear-gradient(165deg,#fffdf8,#f3ecdd);margin-top:6px;}
+  .profile .head{display:flex;gap:14px;align-items:center;padding:18px 18px 4px;}
+  .profile .pic{width:58px;height:58px;border-radius:50%;overflow:hidden;border:1px solid var(--line);flex:none;}
+  .profile .nm{font-family:'Fraunces',serif;font-size:19px;}
+  .profile .sub{font-size:12px;color:var(--ink-soft);}
+  .profile .bd{padding:6px 18px 18px;}
+  .echo{font-style:italic;font-family:'Fraunces',serif;font-size:15px;line-height:1.5;color:var(--ink);margin:10px 0 12px;}
+  .newtag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  .qrow{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .qrow:last-child{border-bottom:none;}
+  .qrow .qn{font-family:'Fraunces',serif;font-weight:500;font-size:14px;min-width:92px;flex:none;}
+  .qrow .qp{font-size:13px;color:var(--ink-soft);line-height:1.45;}
+
+  .footnote{text-align:center;font-size:11px;color:var(--ink-soft);margin-top:24px;line-height:1.6;}
+  .err{background:#fbeee6;border:1px solid #f0d9c9;border-radius:10px;padding:10px 13px;font-size:13px;color:#8a3f22;margin-bottom:14px;}
+  pre.dbg{background:#1f1c18;color:#e7ddca;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;padding:12px 14px;border-radius:10px;overflow:auto;max-height:240px;white-space:pre-wrap;word-break:break-word;margin:0 0 6px;}
+  .fadein{animation:fade .4s ease;}@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <div class="logo">First Dates<small>by The School of Life</small></div>
+    <div class="rightctl">
+      <button id="vtog" class="badge" onclick="toggleVoice()">🔊 Voice on</button>
+      <div id="badge" class="badge"><span class="dot"></span><span id="badgetext">Simulated</span></div>
+    </div>
+  </header>
+  <div id="srv" class="hint" style="text-align:center;margin:0 0 12px;min-height:16px;"></div>
+  <div id="app"></div>
+  <div class="footnote">
+    Live read when the server is configured, otherwise a clearly labelled simulated read. Microphone capture is real.<br>
+    Keys live only on the server, never in this page.
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   First Dates — voice profiling -> clone
+   Kin asks a few questions aloud. Each spoken answer is read by
+   Kin + Claude (live) or simulated. The answers accumulate
+   into a clone, synthesised by Claude.
+============================================================ */
+
+const ANALYZE_URL = '/api/analyze';
+const SYNTH_URL = '/api/synthesize';
+const TTS_URL = '/api/tts';
+
+const STEPS = [
+  { text: "Think of a relationship that really mattered to you. At your best in it, what were you like to be with?" },
+  { followup: true, fallback: "And when you care about someone, how do they usually know it?" },
+  { text: "When someone you love goes quiet or pulls away, what happens in you, and what do you do?" }
+];
+
+let stepIdx = 0, turns = [], lastFollowUp = '', flowLive = false;
+let mediaRecorder=null, chunks=[], stream=null, audioCtx=null, analyser=null, rafId=null, recTimer=null, recSeconds=0;
+
+const app = document.getElementById('app');
+function render(html){ app.innerHTML=''; const d=document.createElement('div'); d.className='card fadein'; d.innerHTML=html; app.appendChild(d); }
+function cap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+function fmt(s){ const m=Math.floor(s/60); const r=s%60; return m+':'+(r<10?'0':'')+r; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toggleDebug(){
+  const d=document.getElementById('debug'); if(!d) return;
+  if(d.style.display!=='none'){ d.style.display='none'; return; }
+  d.innerHTML = turns.map((t,i)=>{
+    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : '(simulated answer — no live data)';
+    const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Claude read for this answer)';
+    const ce = (t.raw && t.raw.interpErr) ? ('\n\nClaude error: ' + t.raw.interpErr) : '';
+    return `<div class="sectlabel">Answer ${i+1} · ${esc(t.q)}</div>
+      <div class="hint" style="text-align:left;margin:0 0 4px;">What Kin heard</div>
+      <pre class="dbg">${esc(v)}</pre>
+      <div class="hint" style="text-align:left;margin:8px 0 4px;">What Claude wrote from it</div>
+      <pre class="dbg">${esc(ci + ce)}</pre>`;
+  }).join('');
+  d.style.display='block';
+}
+function setBadge(live){ const b=document.getElementById('badge'); b.classList.toggle('live',!!live); document.getElementById('badgetext').textContent = live?'Live':'Simulated'; }
+
+/* ---------- text to speech (Kin speaks) ---------- */
+let voiceOn=true, kinVoice=null;
+function loadVoices(){ if(!('speechSynthesis' in window)) return; const vs=speechSynthesis.getVoices().filter(v=>/en(-|_)/i.test(v.lang)||/english/i.test(v.name)); if(vs.length){ kinVoice = vs.find(v=>/samantha|female|aria|jenny|google us/i.test(v.name)) || vs[0]; } }
+if('speechSynthesis' in window){ loadVoices(); speechSynthesis.onvoiceschanged=loadVoices; }
+let currentAudio=null;
+async function speak(text,onend){
+  stopSpeak();
+  if(!voiceOn || !text){ if(onend) setTimeout(onend,120); return; }
+  let settled=false; const finish=(cb)=>{ if(settled) return; settled=true; if(cb) cb(); else if(onend) onend(); };
+  // Prefer a natural ElevenLabs voice from the server; fall back to the browser voice.
+  try{
+    const res=await fetch(TTS_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    const ct=res.headers.get('content-type')||'';
+    if(res.ok && ct.indexOf('audio')>=0){
+      const url=URL.createObjectURL(await res.blob());
+      const a=new Audio(url); currentAudio=a;
+      const orb=document.querySelector('.orb'); if(orb) orb.classList.add('speaking');
+      const cleanup=()=>{ const o=document.querySelector('.orb'); if(o) o.classList.remove('speaking'); URL.revokeObjectURL(url); if(currentAudio===a) currentAudio=null; };
+      a.onended=()=>{ cleanup(); finish(); };
+      a.onerror=()=>{ cleanup(); finish(()=>browserSpeak(text,onend)); };
+      try{ await a.play(); }catch(e){ cleanup(); finish(()=>browserSpeak(text,onend)); }
+      return;
+    }
+  }catch(e){}
+  finish(()=>browserSpeak(text,onend));
+}
+function browserSpeak(text,onend){
+  if(!voiceOn || !('speechSynthesis' in window)){ if(onend) onend(); return; }
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text); if(kinVoice) u.voice=kinVoice; u.rate=.98; u.pitch=1.0;
+    const orb=document.querySelector('.orb'); if(orb) orb.classList.add('speaking');
+    u.onend=()=>{ const o=document.querySelector('.orb'); if(o) o.classList.remove('speaking'); if(onend) onend(); };
+    speechSynthesis.speak(u);
+  }catch(e){ if(onend) onend(); }
+}
+function stopSpeak(){ if(currentAudio){ try{currentAudio.pause();}catch(e){} currentAudio=null; } try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){} }
+function toggleVoice(){ voiceOn=!voiceOn; document.getElementById('vtog').textContent = voiceOn?'🔊 Voice on':'🔇 Voice off'; if(!voiceOn) stopSpeak(); }
+
+/* ---------- screens ---------- */
+function screenWelcome(){
+  stopSpeak();
+  render(`
+    <div class="orb"></div>
+    <div class="kicker" style="text-align:center;">Building your clone</div>
+    <h1 class="t" style="text-align:center;">Let's talk about how you love</h1>
+    <p class="body" style="text-align:center;">I'll ask you a few questions about who you are in relationships. Just talk to me as you would a thoughtful friend, and I'll build a version of you from how you sound, not only what you say.</p>
+    <div class="stack">
+      <button class="btn btn-primary" onclick="beginFlow()">Start talking</button>
+      <button class="btn btn-soft" onclick="runSampleFlow()">Run a sample conversation</button>
+    </div>
+  `);
+}
+
+function beginFlow(){ stepIdx=0; turns=[]; lastFollowUp=''; flowLive=false; screenQuestion(); }
+function curQuestion(){ const s=STEPS[stepIdx]; return s.followup ? (lastFollowUp || s.fallback) : s.text; }
+function dots(){ return STEPS.map((s,k)=>`<span class="${k<stepIdx?'done':(k===stepIdx?'on':'')}"></span>`).join(''); }
+
+function screenQuestion(){
+  const q=curQuestion();
+  render(`
+    <div class="orb"></div>
+    <div class="prog">${dots()}</div>
+    <div class="speech"><div class="who">Kin asks · ${stepIdx+1} of ${STEPS.length}</div><p>${q}</p></div>
+    <div class="micwrap">
+      <div class="micbtn" onclick="startRecording()" title="Record">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="#fff" stroke-width="1.8"/><line x1="12" y1="17" x2="12" y2="21" stroke="#fff" stroke-width="1.8"/></svg>
+      </div>
+      <div class="hint">Tap and speak your answer out loud</div>
+    </div>
+    <div class="stack"><button class="btn btn-soft" onclick="sampleAnswer()">Use a sample answer</button></div>
+  `);
+  speak(q);
+}
+
+async function startRecording(){
+  try{ stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){
+    render(`
+      <div class="err">I could not reach the microphone. On a double-clicked file the browser blocks it, so open this from the hosted link, or use a sample answer.</div>
+      <div class="speech"><div class="who">Kin asks</div><p>${curQuestion()}</p></div>
+      <div class="stack">
+        <button class="btn btn-primary" onclick="sampleAnswer()">Use a sample answer</button>
+        <button class="btn btn-soft" onclick="screenQuestion()">Try the mic again</button>
+      </div>`);
+    return;
+  }
+  stopSpeak();
+  chunks=[];
+  const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
+  mediaRecorder = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
+  mediaRecorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  mediaRecorder.onstop=()=>{ const blob=new Blob(chunks,{type: mediaRecorder.mimeType||'audio/webm'}); cleanupAudio(); analyze(blob); };
+  mediaRecorder.start(); recSeconds=0;
+  screenRecording(); setupWaveform();
+  recTimer=setInterval(()=>{ recSeconds++; const el=document.getElementById('timer'); if(el) el.textContent=fmt(recSeconds); },1000);
+}
+
+function screenRecording(){
+  render(`
+    <div class="orb live"></div>
+    <div class="kicker" style="text-align:center;">Listening</div>
+    <canvas id="wave" width="520" height="64"></canvas>
+    <div class="timer" id="timer">0:00</div>
+    <div class="micwrap">
+      <div class="micbtn stop" onclick="stopRecording()" title="Stop"><svg width="22" height="22" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="#b5532f"/></svg></div>
+      <div class="hint">Speak naturally, then tap to finish.</div>
+    </div>
+  `);
+}
+function setupWaveform(){
+  try{
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(stream);
+    analyser=audioCtx.createAnalyser(); analyser.fftSize=256; src.connect(analyser);
+    const canvas=document.getElementById('wave'); const ctx=canvas.getContext('2d');
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    const draw=()=>{
+      rafId=requestAnimationFrame(draw); analyser.getByteFrequencyData(data);
+      const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
+      const bars=40, step=Math.floor(data.length/bars);
+      for(let i=0;i<bars;i++){ const v=data[i*step]/255; const bh=Math.max(3,v*h); const x=i*(w/bars)+2; ctx.fillStyle=i%2?'#2f6d6a':'#b5532f'; ctx.globalAlpha=.5+v*.5; ctx.fillRect(x,(h-bh)/2,(w/bars)-4,bh); }
+      ctx.globalAlpha=1;
+    };
+    draw();
+  }catch(e){}
+}
+function cleanupAudio(){ if(rafId)cancelAnimationFrame(rafId); if(recTimer)clearInterval(recTimer); if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close();}catch(e){}} if(stream){stream.getTracks().forEach(t=>t.stop());} }
+function stopRecording(){ if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop(); }
+
+function screenAnalyzing(){
+  render(`<div class="spin"></div><h1 class="t" style="text-align:center;">Reading how you said it</h1><p class="body" style="text-align:center;">Kin is listening past the words, to tone, warmth, and the catches in your voice.</p>`);
+}
+
+async function analyze(blob){
+  screenAnalyzing();
+  let payload=null, live=false, raw=null;
+  if(blob){
+    try{
+      const res=await fetch(ANALYZE_URL,{method:'POST',headers:{'Content-Type': blob.type||'audio/webm'},body:blob});
+      const data=await res.json().catch(()=>({}));
+      if(res.ok && data.configured && data.velma){
+        payload = (data.interpreted && data.interpreted.story) ? fromInterpreted(data.interpreted) : normalize(data.velma);
+        live=true; raw={ velma:data.velma, interpreted:data.interpreted||null, interpErr:data.interpErr||'' };
+      }
+    }catch(e){}
+  }
+  if(!payload){ payload=simulate(); live=false; }
+  setBadge(live);
+  recordTurn(payload, live, raw);
+}
+function sampleAnswer(){ stopSpeak(); screenAnalyzing(); setBadge(false); setTimeout(()=>recordTurn(simulate(),false,null),900); }
+
+function recordTurn(payload, live, raw){
+  if(live) flowLive=true;
+  turns.push({ q:curQuestion(), payload, live, raw:raw||null });
+  if(payload._followUp) lastFollowUp=payload._followUp;
+  if(stepIdx < STEPS.length-1){ stepIdx++; setTimeout(screenQuestion, live?200:650); }
+  else { screenSynth(); }
+}
+
+/* ---------- clone synthesis ---------- */
+async function screenSynth(){
+  stopSpeak();
+  render(`<div class="orb"></div><h1 class="t" style="text-align:center;">Composing your clone</h1><p class="body" style="text-align:center;">Bringing together everything you said, and how you said it.</p>`);
+  speak('Give me a moment. I am turning all of that into a version of you.');
+  let clone=null;
+  try{
+    const payload = { turns: turns.map(t=>{
+      const v = t.raw && t.raw.velma;
+      const transcript = (v && v.clips) ? v.clips.map(c=>c.text).join(' ') : '';
+      const acousticEmotion = (v && v.clips) ? v.clips.map(c=>c.emotion).filter(Boolean).join(', ') : '';
+      return { question:t.q, transcript, acousticEmotion, story:t.payload._story||'', personality:t.payload._personality||'', profileLine:t.payload._note||'', emotions:(t.payload.emotions||[]).map(e=>e.label) };
+    }) };
+    const res=await fetch(SYNTH_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await res.json().catch(()=>({}));
+    if(res.ok && data.clone && data.clone.cloneStory) clone=data.clone;
+  }catch(e){}
+  if(!clone) clone=aggregateClone();
+  setTimeout(()=>screenClone(clone), flowLive?150:900);
+}
+function aggregateClone(){
+  const all={}; turns.forEach(t=>(t.payload.emotions||[]).forEach(e=>{ all[e.label]=(all[e.label]||0)+(e.score||0.6); }));
+  const emotions=Object.entries(all).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([label,score])=>({label,score:Math.min(0.95, score/Math.max(1,turns.length)+0.18)}));
+  const stories=turns.map(t=>t.payload._story).filter(Boolean);
+  const cloneStory = stories.length ? stories.join(' ') : ('Across your answers, your voice carried '+(emotions.slice(0,2).map(e=>e.label).join(' and ')||'warmth')+', steadier in some moments and softer in others. There is more under the surface than the words let on.');
+  const personality = turns.map(t=>t.payload._personality).filter(Boolean).pop() || (emotions.slice(0,3).map(e=>e.label).join(', '));
+  const profileLine = turns.map(t=>t.payload._note).filter(Boolean).pop() || 'Someone whose warmth shows in how they speak.';
+  const traits = emotions.slice(0,3).map(e=>({name:cap(e.label), phrase:'comes through clearly in how you speak'}));
+  return { cloneStory, personality, profileLine, emotions, traits };
+}
+
+/* ---------- portrait ---------- */
+function manPortrait(){
+  const id=Math.random().toString(36).slice(2,7);
+  return `<svg viewBox="0 0 200 250" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
+    <defs><linearGradient id="b${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dde6e6"/><stop offset="1" stop-color="#b9c6c7"/></linearGradient>
+    <radialGradient id="f${id}" cx="42%" cy="38%" r="68%"><stop offset="0" stop-color="#e3b08a"/><stop offset="1" stop-color="#c5895f"/></radialGradient></defs>
+    <rect width="200" height="250" fill="url(#b${id})"/>
+    <path d="M26 250c0-48 34-68 74-68s74 20 74 68z" fill="#3f5660"/>
+    <path d="M88 160h24v24c0 9-24 9-24 0z" fill="#c5895f"/>
+    <ellipse cx="56" cy="120" rx="8" ry="12" fill="#e3b08a"/><ellipse cx="144" cy="120" rx="8" ry="12" fill="#e3b08a"/>
+    <path d="M58 114c0-31 18-54 42-54s42 23 42 54c0 35-20 62-42 62s-42-27-42-62z" fill="url(#f${id})"/>
+    <path d="M66 130c4 22 17 34 34 34s30-12 34-34c-5 14-18 22-34 22s-29-8-34-22z" fill="#c5895f" opacity=".3"/>
+    <path d="M58 112c-3-34 20-54 42-54s45 20 42 54c-7-18-13-26-24-26-5 7-29 8-39 2-8 3-17 8-21 24z" fill="#33271b"/>
+    <path d="M74 108q11-6 21-1" stroke="#33271b" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M105 107q11-5 21 1" stroke="#33271b" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <ellipse cx="84" cy="120" rx="9" ry="6" fill="#fff"/><ellipse cx="116" cy="120" rx="9" ry="6" fill="#fff"/>
+    <circle cx="85" cy="120" r="4.2" fill="#5b3a24"/><circle cx="115" cy="120" r="4.2" fill="#5b3a24"/>
+    <circle cx="85" cy="120" r="1.7" fill="#160f08"/><circle cx="115" cy="120" r="1.7" fill="#160f08"/>
+    <path d="M100 124v11l-5 4" stroke="#c5895f" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M88 147q12 7 24 0" stroke="#bd7e63" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function screenClone(c){
+  stopSpeak();
+  const chips=(c.emotions||[]).slice(0,4).map(e=>`<span class="chip">${e.label}${typeof e.score==='number'?`<span class="lvl"><i style="width:${Math.round(e.score*100)}%"></i></span>`:''}</span>`).join('');
+  const traits=(c.traits||[]).map(t=>`<div class="qrow"><div class="qn">${cap(t.name)}</div><div class="qp">${t.phrase}</div></div>`).join('');
+  render(`
+    <div class="kicker">${flowLive?'Built live from your voice':'Sample clone'}</div>
+    <h1 class="t">Your clone</h1>
+    <p class="body">A version of you in relationships, built from how you sounded across the conversation. This is what would go and meet people on your behalf.</p>
+    <div class="chips" style="margin-bottom:14px;">${chips}</div>
+    <div class="profile">
+      <div class="head"><div class="pic">${manPortrait()}</div><div><div class="nm">Alex</div><div class="sub">Built from ${turns.length} answers, by how you sound</div></div></div>
+      <div class="bd">
+        <div class="echo">"${cap(c.profileLine||'')}."</div>
+        <p class="story" style="font-size:15px;margin:0 0 12px;">${c.cloneStory||''}</p>
+        ${c.personality?`<div class="qrow"><div class="qn">In a phrase <span class="newtag">new</span></div><div class="qp">${cap(c.personality)}</div></div>`:''}
+        ${traits}
+      </div>
+    </div>
+    <div class="stack"><button class="btn btn-primary" onclick="screenWelcome()">Start over</button></div>
+    <div style="text-align:center;margin-top:14px;"><button class="badge" onclick="toggleDebug()" style="cursor:pointer;">Show what Kin heard (debug)</button></div>
+    <div id="debug" style="display:none;margin-top:12px;"></div>
+  `);
+  speak(c.profileLine || 'Here is the version of you I built.');
+}
+
+/* ---------- Claude read -> render shape ---------- */
+function fromInterpreted(i){
   return {
-    stt: { emotion_signal: true },
-    default_conversation_type: CT_UUID,
-    conversation_types: [{
-      conversation_type_uuid: CT_UUID,
-      name: 'Relationship Reflection',
-      short_description: 'A person reflecting candidly on themselves in relationships.',
-      detailed_description: 'A single speaker answering questions about who they are in close relationships — how they love, connect, and handle conflict, distance and reassurance. The tone is personal and honest. This is self-reflection, not media narration, an interview, or a service call.',
-    }],
-    participant_roles: [{
-      participant_role_uuid: ROLE_UUID,
-      name: 'Reflecting Speaker',
-      short_description: 'The person reflecting on their relational self.',
-      detailed_description: 'The single speaker sharing honest reflections about their own feelings and patterns in relationships.',
-      applies_to_conversation_type_uuids: [CT_UUID],
-    }],
+    emotions:(i.emotions||[]).filter(e=>e&&e.label).map(e=>({label:e.label,score:typeof e.score==='number'?e.score:0.65})),
+    topics:[], behaviors:[], sentiment:0.5,
+    _story:i.story, _note:i.profileLine||i.personality, _personality:i.personality, _followUp:i.followUp
+  };
+}
+function normalize(j){
+  j=j||{}; const out={emotions:[],sentiment:0.4,topics:[],behaviors:[]};
+  const em=j.emotion||j.emotions||(j.summary&&j.summary.emotion);
+  if(Array.isArray(em)) out.emotions=em.map(e=>({label:e.label||e.name||e.emotion,score:e.score??e.confidence??0.6})).filter(e=>e.label);
+  else if(em&&typeof em==='object') out.emotions=Object.entries(em).map(([label,score])=>({label,score:Number(score)||0.6}));
+  if(typeof j.sentiment==='number') out.sentiment=j.sentiment;
+  const sim=simulate();
+  if(!out.emotions.length) out.emotions=sim.emotions;
+  out._note=sim._note; out._story=sim._story;
+  return out;
+}
+
+/* ---------- simulation (no key / fallback): delivery + tone only ---------- */
+const SIM=[
+  {emotions:[['warmth',0.84],['sincerity',0.72],['nervous energy',0.41]], note:'warmth comes through in your voice even when your words stay measured', personality:'warm, sincere, a little self-effacing'},
+  {emotions:[['calm',0.7],['curiosity',0.62],['openness',0.5]], note:'you open slowly, and you mean it when you do', personality:'measured, curious, quietly open'},
+  {emotions:[['enthusiasm',0.8],['tenderness',0.55],['hopefulness',0.5]], note:'your voice lifts when something matters to you', personality:'bright, tender, easily moved by people'},
+  {emotions:[['steadiness',0.68],['pride',0.6],['wistfulness',0.46]], note:'there is steadiness in how you speak, and a little weight you carry well', personality:'steady, proud, quietly reflective'}
+];
+function jit(x){ return Math.max(0.05,Math.min(0.97, x + (Math.random()*0.12-0.06))); }
+function simulate(){
+  const s=SIM[Math.floor(Math.random()*SIM.length)];
+  return {
+    emotions:s.emotions.map(([label,score])=>({label,score:jit(score)})),
+    topics:[], behaviors:[], sentiment:0.3,
+    _story:'Kin read your delivery and tone, the warmth, the pace, and the small hesitations, and heard '+s.note+'.',
+    _note:s.note, _personality:s.personality, _dur:14+Math.floor(Math.random()*14)
   };
 }
 
-// ---- Velma streaming (per-utterance emotion) ----
-function velmaStreaming(audio, key, cfg) {
-  return new Promise((resolve, reject) => {
-    const out = { __source: 'streaming', duration_ms: 0, clips: [], behaviors: [], conversation_type_pick: null, participant_role_picks: [], topics: [], topic_sentiments: [], summary: '' };
-    let settled = false, ws;
-    const finish = (err) => { if (settled) return; settled = true; clearTimeout(timer); try { ws && ws.close(); } catch (e) {} err ? reject(err) : resolve(out); };
-    const timer = setTimeout(() => finish(out.clips.length ? null : new Error('stream_timeout')), 45000);
-    try { ws = new WebSocket(VELMA_STREAM + '?api_key=' + encodeURIComponent(key)); }
-    catch (e) { finish(new Error('ws_connect_failed')); return; }
-    ws.on('open', () => {
-      try {
-        ws.send(JSON.stringify(cfg));
-        const CH = 32 * 1024;
-        for (let i = 0; i < audio.length; i += CH) ws.send(audio.subarray(i, Math.min(audio.length, i + CH)));
-        ws.send('');
-      } catch (e) { finish(e); }
-    });
-    ws.on('message', (data) => {
-      let ev; try { ev = JSON.parse(data.toString()); } catch (e) { return; }
-      switch (ev.type) {
-        case 'clip': if (ev.clip) out.clips.push(ev.clip); break;
-        case 'conversation_type': out.conversation_type_pick = ev.pick; break;
-        case 'participant_role': if (ev.pick) out.participant_role_picks.push(ev.pick); break;
-        case 'behavior_detection': if (ev.detection) out.behaviors.push(ev.detection); break;
-        case 'topics': out.topics = ev.topics || []; break;
-        case 'topic_sentiment': if (ev.topic_sentiment) out.topic_sentiments.push(ev.topic_sentiment); break;
-        case 'summary': out.summary = ev.text || ''; break;
-        case 'done': out.duration_ms = ev.duration_ms || out.duration_ms; finish(null); break;
-        case 'error': finish(new Error(ev.error || 'stream_error')); break;
-      }
-    });
-    ws.on('error', (e) => finish(e instanceof Error ? e : new Error('ws_error')));
-    ws.on('close', () => { if (!settled) finish(out.clips.length ? null : new Error('closed_early')); });
-  });
+/* ---------- boot ---------- */
+async function checkServer(){
+  try{
+    const r=await fetch(ANALYZE_URL); const d=await r.json();
+    const el=document.getElementById('srv'); if(!el) return;
+    if(d && d.velmaKey){ el.textContent='Kin ready'+(d.llmKey?' · deep read on':'')+(d.ttsKey?' · voice on':' · browser voice'); el.style.color='var(--good)'; }
+    else { el.textContent='Kin is not connected — set MODULATE_API_KEY and redeploy'; el.style.color='#a9762a'; }
+  }catch(e){}
 }
-
-async function postBatch(audio, contentType, key, config) {
-  const form = new FormData();
-  form.append('upload_file', new Blob([audio], { type: contentType }), 'reply.webm');
-  form.append('config', JSON.stringify(config));
-  return fetch(VELMA_BATCH, { method: 'POST', headers: { 'X-API-Key': key }, body: form });
-}
-
-async function velmaBatch(audio, contentType, key, cfg) {
-  let r = await postBatch(audio, contentType, key, cfg);
-  // If the richer config (custom conversation type) is rejected, self-heal with the
-  // minimal emotion-only config so the read still works.
-  if (r.status === 422) r = await postBatch(audio, contentType, key, { stt: { emotion_signal: true } });
-  const text = await r.text();
-  if (!r.ok) throw new Error('velma_' + r.status + ': ' + text.slice(0, 300));
-  let velma; try { velma = JSON.parse(text); } catch (e) { velma = { raw: text }; }
-  velma.__source = 'batch';
-  return velma;
-}
-
-// Builds a tiny silent WAV so the diagnostic can probe Velma without real audio.
-function makeSilentWav(seconds = 1, rate = 16000) {
-  const n = seconds * rate, dataLen = n * 2, buf = Buffer.alloc(44 + dataLen);
-  buf.write('RIFF', 0); buf.writeUInt32LE(36 + dataLen, 4); buf.write('WAVE', 8);
-  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
-  buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
-  buf.write('data', 36); buf.writeUInt32LE(dataLen, 40);
-  return buf;
-}
-async function batchProbe(audio, key, config) {
-  try {
-    const r = await postBatch(audio, 'audio/wav', key, config);
-    const body = (await r.text()).slice(0, 300);
-    return { status: r.status, ok: r.ok, body };
-  } catch (e) { return { error: String((e && e.message) || e) }; }
-}
-
-function extractJson(s) {
-  if (!s) return null;
-  let t = s.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
-  try { return JSON.parse(t); } catch (e) {}
-  const a = t.indexOf('{'), b = t.lastIndexOf('}');
-  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {} }
-  return null;
-}
-
-async function claudeJSON(system, user, primaryModel, maxTokens) {
-  const llmKey = process.env.ANTHROPIC_API_KEY;
-  if (!llmKey) throw new Error('no_anthropic_key');
-  const models = [...new Set([primaryModel, 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-3-5-sonnet-20241022'].filter(Boolean))];
-  let lastErr = 'llm_failed';
-  for (const model of models) {
-    try {
-      const r = await fetch(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: { 'x-api-key': llmKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
-      });
-      if (!r.ok) { const t = await r.text(); lastErr = 'llm_' + r.status + ' (' + model + '): ' + t.slice(0, 160); continue; }
-      const data = await r.json();
-      const out = (data.content && data.content[0] && data.content[0].text) || '';
-      const parsed = extractJson(out);
-      if (parsed) return parsed;
-      lastErr = 'llm_bad_shape (' + model + ')';
-    } catch (e) { lastErr = String((e && e.message) || e) + ' (' + model + ')'; }
-  }
-  throw new Error(lastErr);
-}
-
-async function interpret(velma) {
-  const system =
-    "You are the voice-analysis interpreter for First Dates, a thoughtful dating app by The School of Life. " +
-    "Everything you write is about who this person is IN A RELATIONSHIP: what they are like to be close to, how they show love and warmth, how they handle conflict, distance and reassurance, what they bring to a partner and what they may need. " +
-    "You receive JSON from Velma. Each clip carries an 'emotion' field, Velma's acoustic read of the voice (e.g. Affectionate, Calm, Hopeful, Anxious, Content, Sad), from the sound itself, not the words. There may be several clips and the emotion can shift between them — pay attention to that movement. " +
-    "Treat the per-clip 'emotion' fields as your PRIMARY signal. Read like a perceptive therapist: the richest insight is in the RELATIONSHIP between how they sounded and what they said, and how the feeling moves across the answer. Where tone and words agree it is sincere; where they diverge (upbeat words in an anxious voice, calm words carrying longing) that gap is where the real feeling lives. Name what they feel but may not be saying. Never just paraphrase. " +
-    "Concrete, human language, not vague clinical words. Insightful and a little generous, never flattering, never a horoscope. Output STRICT JSON only.";
-  const shape =
-    '{"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}],' +
-    '"story":"2 to 3 sentences on how they sounded and what it suggests about them as a partner",' +
-    '"personality":"a vivid 6 to 10 word descriptor of them in relationships",' +
-    '"profileLine":"one short third-person line about what they are like to love",' +
-    '"followUp":"a warm, specific one-sentence follow-up question about how they are in relationships, based on what they just said"}';
-  const user = 'Velma output (JSON):\n' + JSON.stringify(velma).slice(0, 12000) + '\n\nReturn ONLY JSON in exactly this shape:\n' + shape;
-  const parsed = await claudeJSON(system, user, READ_MODEL, 700);
-  if (!parsed.story) throw new Error('llm_bad_shape');
-  return parsed;
-}
-
-async function synthesize(turns) {
-  const system =
-    "You are the clone-builder for First Dates, by The School of Life, with the emotional intelligence of a skilled therapist. " +
-    "For each answer you get: the question, what they SAID (transcript), how they SOUNDED (acousticEmotion, Velma's read of the voice), and a short read. " +
-    "Build a portrait of who this person is IN A RELATIONSHIP by reading between the lines. The most revealing signal is the relationship between voice and words: where they agree it is sincere, and especially where they diverge (warm words in an anxious voice, calm words carrying longing) that gap is where the truth lives. Name what they feel but do not say. " +
-    "Cover how they love and show warmth, how they handle closeness, conflict, distance and reassurance, what they protect, what they long for, what they bring and what they need. " +
-    "Compassionate but honest. Specific, never generic, never a horoscope. Output STRICT JSON only.";
-  const shape =
-    '{"cloneStory":"3 to 4 sentences on what this person is like in a relationship, grounded in the answers",' +
-    '"personality":"a vivid 6 to 10 word descriptor of them as a partner",' +
-    '"profileLine":"one evocative third-person line about what they are like to love",' +
-    '"traits":[{"name":"short relational trait","phrase":"a short, specific phrase about how it shows in closeness"}],' +
-    '"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}]}';
-  const user = 'Per-answer data (question, transcript = words, acousticEmotion = how the voice sounded, story = a short read):\n' +
-    JSON.stringify(turns).slice(0, 14000) + '\n\nReturn ONLY JSON in this shape, 3 traits and up to 4 emotions:\n' + shape;
-  const parsed = await claudeJSON(system, user, SYNTH_MODEL, 900);
-  if (!parsed.cloneStory) throw new Error('synth_bad_shape');
-  return parsed;
-}
-
-// ---- routes ----
-app.get('/api/analyze', async (req, res) => {
-  // Diagnostic: probe Velma with a tiny silent file using both configs, so we can see
-  // exactly why a real request fails (config rejected, no credits, bad key, etc.).
-  if (req.query.diag) {
-    const key = process.env.MODULATE_API_KEY;
-    if (!key) { res.json({ diag: true, velmaKey: false }); return; }
-    const wav = makeSilentWav(1);
-    const rich = await batchProbe(wav, key, velmaConfigObj());
-    const minimal = await batchProbe(wav, key, { stt: { emotion_signal: true } });
-    res.json({ diag: true, richConfig: rich, minimalConfig: minimal });
-    return;
-  }
-  res.json({
-    ok: true,
-    velmaKey: !!process.env.MODULATE_API_KEY,
-    llmKey: !!process.env.ANTHROPIC_API_KEY,
-    ttsKey: !!process.env.ELEVENLABS_API_KEY,
-    model: READ_MODEL,
-    streaming: STREAMING,
-  });
-});
-
-app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async (req, res) => {
-  const key = process.env.MODULATE_API_KEY;
-  if (!key) { res.json({ configured: false }); return; }
-  const audio = req.body;
-  if (!audio || !audio.length) { res.status(400).json({ error: 'no_audio' }); return; }
-  const contentType = req.headers['content-type'] || 'audio/webm';
-  const cfg = velmaConfigObj();
-  let velma;
-  try {
-    if (STREAMING) {
-      try {
-        velma = await velmaStreaming(audio, key, cfg);
-        if (!velma.clips || !velma.clips.length) throw new Error('stream_no_clips');
-      } catch (se) {
-        velma = await velmaBatch(audio, contentType, key, cfg);
-        velma.__stream_fallback = String((se && se.message) || se);
-      }
-    } else {
-      velma = await velmaBatch(audio, contentType, key, cfg);
-    }
-  } catch (ve) {
-    res.status(502).json({ error: 'velma_failed', detail: String((ve && ve.message) || ve) });
-    return;
-  }
-  let interpreted = null, interpErr;
-  if (process.env.ANTHROPIC_API_KEY) {
-    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); }
-  }
-  res.json({ configured: true, velma, interpreted, interpErr });
-});
-
-app.post('/api/synthesize', express.json({ limit: '1mb' }), async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) { res.json({ configured: false }); return; }
-  const turns = (req.body && req.body.turns) || [];
-  if (!turns.length) { res.status(400).json({ error: 'no_turns' }); return; }
-  try { const clone = await synthesize(turns); res.json({ configured: true, clone }); }
-  catch (e) { res.json({ configured: true, error: String((e && e.message) || e) }); }
-});
-
-app.get('/api/tts', async (req, res) => {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) { res.json({ configured: false }); return; }
-  try {
-    const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID, {
-      method: 'POST',
-      headers: { 'xi-api-key': key, 'content-type': 'application/json', 'accept': 'audio/mpeg' },
-      body: JSON.stringify({ text: 'Hello.', model_id: TTS_MODEL }),
-    });
-    let detail = ''; if (!r.ok) detail = (await r.text()).slice(0, 300);
-    res.json({ configured: true, voiceId: VOICE_ID, model: TTS_MODEL, ttsOk: r.ok, status: r.status, detail });
-  } catch (e) { res.json({ configured: true, error: String((e && e.message) || e) }); }
-});
-
-app.post('/api/tts', express.json({ limit: '200kb' }), async (req, res) => {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) { res.json({ configured: false }); return; }
-  const text = ((req.body && req.body.text) || '').toString().slice(0, 800);
-  if (!text.trim()) { res.status(400).json({ error: 'no_text' }); return; }
-  try {
-    const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID, {
-      method: 'POST',
-      headers: { 'xi-api-key': key, 'content-type': 'application/json', 'accept': 'audio/mpeg' },
-      body: JSON.stringify({ text, model_id: TTS_MODEL, voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true } }),
-    });
-    if (!r.ok) { const t = await r.text(); res.status(502).json({ error: 'tts_' + r.status, detail: t.slice(0, 200) }); return; }
-    const audio = Buffer.from(await r.arrayBuffer());
-    res.set('Content-Type', 'audio/mpeg');
-    res.set('Cache-Control', 'no-store');
-    res.send(audio);
-  } catch (e) { res.status(500).json({ error: 'tts_failure', detail: String((e && e.message) || e) }); }
-});
-
-// static front end
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-app.listen(PORT, () => console.log('kin-server listening on ' + PORT + ' (streaming ' + (STREAMING ? 'on' : 'off') + ')'));
+screenWelcome(); setBadge(false); checkServer();
+</script>
+</body>
+</html>
