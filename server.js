@@ -41,8 +41,8 @@ const PART_ROLE = {
   applies_to_conversation_type_uuids: [CT_UUID],
 };
 
-// The main pipeline uses the minimal, known-good config so streaming and batch both
-// work. The richer conversation-type config is still being validated (see /api/analyze?diag).
+// Main config: emotion read + the Relationship Reflection conversation type and role
+// (the default_conversation_type field is omitted because Velma rejects it).
 function velmaConfigObj() { return { stt: { emotion_signal: true }, conversation_types: [CONV_TYPE], participant_roles: [PART_ROLE] }; }
 function richConfigObj() { return { stt: { emotion_signal: true }, default_conversation_type: CT_UUID, conversation_types: [CONV_TYPE], participant_roles: [PART_ROLE] }; }
 
@@ -154,8 +154,9 @@ async function interpret(velma) {
   const system =
     "You are the voice-analysis interpreter for First Dates, a thoughtful dating app by The School of Life. " +
     "Everything you write is about who this person is IN A RELATIONSHIP: what they are like to be close to, how they show love and warmth, how they handle conflict, distance and reassurance, what they bring to a partner and what they may need. " +
-    "You receive JSON from Velma. Each clip carries an 'emotion' field, Velma's acoustic read of the voice (e.g. Affectionate, Calm, Hopeful, Anxious, Content, Sad), from the sound itself, not the words. There may be several clips and the emotion can shift between them — pay attention to that movement. " +
-    "Treat the per-clip 'emotion' fields as your PRIMARY signal. Read like a perceptive therapist: the richest insight is in the RELATIONSHIP between how they sounded and what they said, and how the feeling moves across the answer. Where tone and words agree it is sincere; where they diverge (upbeat words in an anxious voice, calm words carrying longing) that gap is where the real feeling lives. Name what they feel but may not be saying. Never just paraphrase. " +
+    "You receive JSON from Velma. The 'clips' are in time order, and each carries an 'emotion' field, Velma's acoustic read of the voice in that moment (e.g. Happy, Calm, Anxious, Affectionate, Sad). With streaming, one answer can contain SEVERAL clips whose emotion shifts as they speak. " +
+    "The emotional MOVEMENT across the clips is your most important signal, a hidden language under the words. Track the sequence: where does the feeling change, what were they saying at that exact moment, and what does the shift reveal? A flash of anxiety inside a calm answer, a brightness that deflates, a tenderness that surfaces on one phrase, a steadiness that briefly cracks — these transitions tell you more than any single label. Read like a perceptive therapist tracking the micro-shifts in someone's voice. " +
+    "Also weigh the gap between tone and words: where the acoustic emotion and the words diverge (upbeat words in an anxious voice, calm words carrying longing) that gap is where the real feeling lives. Name what they feel but may not be saying. Never just paraphrase the words. " +
     "Concrete, human language, not vague clinical words. Insightful and a little generous, never flattering, never a horoscope. Output STRICT JSON only.";
   const shape =
     '{"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}],' +
