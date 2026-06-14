@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>First Dates · Velma emotional read</title>
+<title>First Dates · Kin</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
   :root{
@@ -102,7 +102,7 @@
   <div id="srv" class="hint" style="text-align:center;margin:0 0 12px;min-height:16px;"></div>
   <div id="app"></div>
   <div class="footnote">
-    Live Velma read when the server is configured, otherwise a clearly labelled simulated read. Microphone capture is real.<br>
+    Live read when the server is configured, otherwise a clearly labelled simulated read. Microphone capture is real.<br>
     Keys live only on the server, never in this page.
   </div>
 </div>
@@ -111,7 +111,7 @@
 /* ============================================================
    First Dates — voice profiling -> clone
    Kin asks a few questions aloud. Each spoken answer is read by
-   Velma + Claude (live) or simulated. The answers accumulate
+   Kin + Claude (live) or simulated. The answers accumulate
    into a clone, synthesised by Claude.
 ============================================================ */
 
@@ -137,18 +137,18 @@ function toggleDebug(){
   const d=document.getElementById('debug'); if(!d) return;
   if(d.style.display!=='none'){ d.style.display='none'; return; }
   d.innerHTML = turns.map((t,i)=>{
-    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : '(simulated answer — no live Velma data)';
+    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : '(simulated answer — no live data)';
     const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Claude read for this answer)';
     const ce = (t.raw && t.raw.interpErr) ? ('\n\nClaude error: ' + t.raw.interpErr) : '';
     return `<div class="sectlabel">Answer ${i+1} · ${esc(t.q)}</div>
-      <div class="hint" style="text-align:left;margin:0 0 4px;">What Velma sent back</div>
+      <div class="hint" style="text-align:left;margin:0 0 4px;">What Kin heard</div>
       <pre class="dbg">${esc(v)}</pre>
       <div class="hint" style="text-align:left;margin:8px 0 4px;">What Claude wrote from it</div>
       <pre class="dbg">${esc(ci + ce)}</pre>`;
   }).join('');
   d.style.display='block';
 }
-function setBadge(live){ const b=document.getElementById('badge'); b.classList.toggle('live',!!live); document.getElementById('badgetext').textContent = live?'Live Velma':'Simulated'; }
+function setBadge(live){ const b=document.getElementById('badge'); b.classList.toggle('live',!!live); document.getElementById('badgetext').textContent = live?'Live':'Simulated'; }
 
 /* ---------- text to speech (Kin speaks) ---------- */
 let voiceOn=true, kinVoice=null;
@@ -281,7 +281,7 @@ function cleanupAudio(){ if(rafId)cancelAnimationFrame(rafId); if(recTimer)clear
 function stopRecording(){ if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop(); }
 
 function screenAnalyzing(){
-  render(`<div class="spin"></div><h1 class="t" style="text-align:center;">Reading how you said it</h1><p class="body" style="text-align:center;">Velma is listening past the words, to tone, warmth, and the catches in your voice.</p>`);
+  render(`<div class="spin"></div><h1 class="t" style="text-align:center;">Reading how you said it</h1><p class="body" style="text-align:center;">Kin is listening past the words, to tone, warmth, and the catches in your voice.</p>`);
 }
 
 async function analyze(blob){
@@ -384,7 +384,7 @@ function screenClone(c){
       </div>
     </div>
     <div class="stack"><button class="btn btn-primary" onclick="screenWelcome()">Start over</button></div>
-    <div style="text-align:center;margin-top:14px;"><button class="badge" onclick="toggleDebug()" style="cursor:pointer;">Show what Velma sent (debug)</button></div>
+    <div style="text-align:center;margin-top:14px;"><button class="badge" onclick="toggleDebug()" style="cursor:pointer;">Show what Kin heard (debug)</button></div>
     <div id="debug" style="display:none;margin-top:12px;"></div>
   `);
   speak(c.profileLine || 'Here is the version of you I built.');
@@ -423,7 +423,7 @@ function simulate(){
   return {
     emotions:s.emotions.map(([label,score])=>({label,score:jit(score)})),
     topics:[], behaviors:[], sentiment:0.3,
-    _story:'Velma read your delivery and tone, the warmth, the pace, and the small hesitations, and heard '+s.note+'.',
+    _story:'Kin read your delivery and tone, the warmth, the pace, and the small hesitations, and heard '+s.note+'.',
     _note:s.note, _personality:s.personality, _dur:14+Math.floor(Math.random()*14)
   };
 }
@@ -433,8 +433,8 @@ async function checkServer(){
   try{
     const r=await fetch(ANALYZE_URL); const d=await r.json();
     const el=document.getElementById('srv'); if(!el) return;
-    if(d && d.velmaKey){ el.textContent='Server ready · Velma'+(d.llmKey?' · Claude':' · no Claude')+(d.ttsKey?' · ElevenLabs voice':' · browser voice'); el.style.color='var(--good)'; }
-    else { el.textContent='Server has no Velma key — add MODULATE_API_KEY in Vercel, then redeploy'; el.style.color='#a9762a'; }
+    if(d && d.velmaKey){ el.textContent='Kin ready'+(d.llmKey?' · deep read on':'')+(d.ttsKey?' · voice on':' · browser voice'); el.style.color='var(--good)'; }
+    else { el.textContent='Kin is not connected — set MODULATE_API_KEY and redeploy'; el.style.color='#a9762a'; }
   }catch(e){}
 }
 screenWelcome(); setBadge(false); checkServer();
