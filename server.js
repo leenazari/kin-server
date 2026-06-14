@@ -17,8 +17,8 @@ const PORT = process.env.PORT || 3000;
 const VELMA_BATCH = 'https://modulate-developer-apis.com/api/velma-2-batch';
 const VELMA_STREAM = 'wss://modulate-developer-apis.com/api/velma-2-streaming';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const READ_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
-const SYNTH_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
+const READ_MODEL = process.env.READ_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const SYNTH_MODEL = process.env.SYNTH_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 const TTS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
 const STREAMING = process.env.VELMA_STREAMING !== '0'; // default ON here

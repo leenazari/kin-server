@@ -88,6 +88,25 @@
   .err{background:#fbeee6;border:1px solid #f0d9c9;border-radius:10px;padding:10px 13px;font-size:13px;color:#8a3f22;margin-bottom:14px;}
   pre.dbg{background:#1f1c18;color:#e7ddca;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;padding:12px 14px;border-radius:10px;overflow:auto;max-height:240px;white-space:pre-wrap;word-break:break-word;margin:0 0 6px;}
   .fadein{animation:fade .4s ease;}@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  /* ---- love loading scene ---- */
+  .lovewrap{padding:10px 0 2px;text-align:center;}
+  .lovesvg{width:100%;max-width:330px;height:auto;display:block;margin:0 auto 2px;}
+  .lovesvg .thread{stroke-dasharray:200;stroke-dashoffset:200;animation:loveDraw 5.6s ease-in-out infinite;}
+  .lovesvg .figL{animation:leanL 4.6s ease-in-out infinite;}
+  .lovesvg .figR{animation:leanR 4.6s ease-in-out infinite;}
+  .lovesvg .heart{transform-box:fill-box;transform-origin:center;animation:beat 4.6s ease-in-out infinite;}
+  .lovesvg .petal{transform-box:fill-box;transform-origin:center;opacity:0;animation:rise 6s ease-in infinite;}
+  .lovesvg .p2{animation-delay:2s;} .lovesvg .p3{animation-delay:4s;}
+  @keyframes loveDraw{0%{stroke-dashoffset:200}45%{stroke-dashoffset:0}74%{stroke-dashoffset:0}100%{stroke-dashoffset:-200}}
+  @keyframes leanL{0%,100%{transform:translateX(0)}50%{transform:translateX(7px)}}
+  @keyframes leanR{0%,100%{transform:translateX(0)}50%{transform:translateX(-7px)}}
+  @keyframes beat{0%,40%{transform:scale(.55);opacity:0}56%{transform:scale(1);opacity:.92}80%{opacity:.92}92%{transform:scale(.9);opacity:0}100%{opacity:0}}
+  @keyframes rise{0%{opacity:0;transform:translateY(0) scale(.8)}18%{opacity:.65}100%{opacity:0;transform:translateY(-44px) scale(1)}}
+  .lovelines{position:relative;height:28px;margin-top:12px;}
+  .lovelines span{position:absolute;left:0;right:0;text-align:center;font-family:'Fraunces',serif;font-style:italic;font-size:15.5px;color:var(--ink-soft);opacity:0;animation:lovephr 14s linear infinite;}
+  .lovelines span:nth-child(2){animation-delay:-3.5s} .lovelines span:nth-child(3){animation-delay:-7s} .lovelines span:nth-child(4){animation-delay:-10.5s}
+  @keyframes lovephr{0%{opacity:0}3%{opacity:1}22%{opacity:1}25%{opacity:0}100%{opacity:0}}
 </style>
 </head>
 <body>
@@ -349,7 +368,31 @@ function sampleAnswer(){
 /* ---------- clone synthesis ---------- */
 async function screenSynth(){
   stopSpeak();
-  render(`<div class="orb"></div><h1 class="t" style="text-align:center;">Composing your clone</h1><p class="body" style="text-align:center;">Bringing together everything you said, and how you said it.</p>`);
+  render(`
+    <div class="lovewrap">
+      <svg class="lovesvg" viewBox="0 0 320 176" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path class="thread" d="M120 116 Q160 78 200 116" stroke="#b5532f" stroke-width="2.2"/>
+        <g class="figL" stroke="#2f6d6a" stroke-width="2.4">
+          <circle cx="100" cy="74" r="19"/>
+          <path d="M68 150 Q100 116 132 150"/>
+        </g>
+        <g class="figR" stroke="#b5532f" stroke-width="2.4">
+          <circle cx="220" cy="74" r="19"/>
+          <path d="M188 150 Q220 116 252 150"/>
+        </g>
+        <path class="heart" d="M160 102 c-6 -11 -21 -6 -21 5 c0 9 13 15 21 21 c8 -6 21 -12 21 -21 c0 -11 -15 -16 -21 -5 z" fill="#b5532f" stroke="none"/>
+        <ellipse class="petal" cx="150" cy="132" rx="3" ry="5" fill="#b5532f" stroke="none"/>
+        <ellipse class="petal p2" cx="170" cy="132" rx="3" ry="5" fill="#2f6d6a" stroke="none"/>
+        <ellipse class="petal p3" cx="160" cy="136" rx="2.6" ry="4.4" fill="#b5532f" stroke="none"/>
+      </svg>
+      <h1 class="t" style="text-align:center;font-size:23px;margin:4px 0 2px;">Composing your clone</h1>
+      <div class="lovelines">
+        <span>Every love begins with a conversation.</span>
+        <span>Two people, and the space between them.</span>
+        <span>A first word, a held glance.</span>
+        <span>Bringing the whole of you together.</span>
+      </div>
+    </div>`);
   speak('Give me a moment. I am turning all of that into a version of you.');
   await Promise.allSettled(turns.map(t=>t.analysis).filter(Boolean));
   let clone=null;
