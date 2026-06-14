@@ -126,6 +126,7 @@ const STEPS = [
 ];
 
 let stepIdx = 0, turns = [], lastFollowUp = '', flowLive = false;
+const VIEWER = { gender:'man', seeking:'woman' };
 let mediaRecorder=null, chunks=[], stream=null, audioCtx=null, analyser=null, rafId=null, recTimer=null, recSeconds=0;
 
 const app = document.getElementById('app');
@@ -197,6 +198,16 @@ function screenWelcome(){
     <div class="kicker" style="text-align:center;">Building your clone</div>
     <h1 class="t" style="text-align:center;">Let's talk about how you love</h1>
     <p class="body" style="text-align:center;">I'll ask you a few questions about who you are in relationships. Just talk to me as you would a thoughtful friend, and I'll build a version of you from how you sound, not only what you say.</p>
+    <div style="display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;font-size:14.5px;color:var(--ink-soft);margin:2px 0 14px;">
+      I'm a
+      <select onchange="VIEWER.gender=this.value" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);">
+        <option value="man" selected>man</option><option value="woman">woman</option><option value="person">person</option>
+      </select>
+      looking for a
+      <select onchange="VIEWER.seeking=this.value" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);">
+        <option value="woman" selected>woman</option><option value="man">man</option><option value="person">person</option>
+      </select>
+    </div>
     <div class="stack">
       <button class="btn btn-primary" onclick="beginFlow()">Start talking</button>
       <button class="btn btn-soft" onclick="runSampleFlow()">Run a sample conversation</button>
@@ -242,7 +253,7 @@ async function startRecording(){
   const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
   mediaRecorder = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
   mediaRecorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  mediaRecorder.onstop=()=>{ const blob=new Blob(chunks,{type: mediaRecorder.mimeType||'audio/webm'}); cleanupAudio(); analyze(blob); };
+  mediaRecorder.onstop=()=>{ const blob=new Blob(chunks,{type: mediaRecorder.mimeType||'audio/webm'}); cleanupAudio(); onAnswer(blob); };
   mediaRecorder.start(); recSeconds=0;
   screenRecording(); setupWaveform();
   recTimer=setInterval(()=>{ recSeconds++; const el=document.getElementById('timer'); if(el) el.textContent=fmt(recSeconds); },1000);
@@ -284,12 +295,14 @@ function screenAnalyzing(){
   render(`<div class="spin"></div><h1 class="t" style="text-align:center;">Reading how you said it</h1><p class="body" style="text-align:center;">Kin is listening past the words, to tone, warmth, and the catches in your voice.</p>`);
 }
 
-async function analyze(blob){
-  screenAnalyzing();
+// Run the read in the BACKGROUND so the person never waits on a spinner between
+// questions. Each answer is analysed while they hear and answer the next one; the
+// clone step waits for any reads that are still running.
+async function analyzeBlob(blob){
   let payload=null, live=false, raw=null, fail='';
   if(blob){
     try{
-      const res=await fetch(ANALYZE_URL,{method:'POST',headers:{'Content-Type': blob.type||'audio/webm'},body:blob});
+      const res=await fetch(ANALYZE_URL,{method:'POST',headers:{'Content-Type': blob.type||'audio/webm','x-subject-gender':VIEWER.gender,'x-seeking-gender':VIEWER.seeking},body:blob});
       let data={}; try{ data=await res.json(); }catch(e){ fail='bad json (status '+res.status+')'; }
       if(res.ok && data.configured && data.velma){
         payload = (data.interpreted && data.interpreted.story) ? fromInterpreted(data.interpreted) : normalize(data.velma);
@@ -299,17 +312,36 @@ async function analyze(blob){
     }catch(e){ fail='fetch error: '+String(e.message||e); }
   } else { fail='no audio blob'; }
   if(!payload){ payload=simulate(); live=false; raw={ __fail:fail, blobBytes: blob?blob.size:0, blobType: blob?blob.type:'' }; }
-  setBadge(live);
-  recordTurn(payload, live, raw);
+  return { payload, live, raw };
 }
-function sampleAnswer(){ stopSpeak(); screenAnalyzing(); setBadge(false); setTimeout(()=>recordTurn(simulate(),false,null),900); }
-
-function recordTurn(payload, live, raw){
-  if(live) flowLive=true;
-  turns.push({ q:curQuestion(), payload, live, raw:raw||null });
-  if(payload._followUp) lastFollowUp=payload._followUp;
-  if(stepIdx < STEPS.length-1){ stepIdx++; setTimeout(screenQuestion, live?200:650); }
-  else { screenSynth(); }
+function onAnswer(blob){
+  const turn={ q:curQuestion(), payload:simulate(), live:false, raw:null, pending:true, analysis:null };
+  turns.push(turn);
+  turn.analysis = analyzeBlob(blob).then(r=>{
+    turn.payload=r.payload; turn.live=r.live; turn.raw=r.raw; turn.pending=false;
+    if(r.live){ flowLive=true; setBadge(true); }
+    if(r.payload && r.payload._followUp) lastFollowUp=r.payload._followUp;
+    return r;
+  }).catch(e=>{ turn.pending=false; turn.raw={ __fail:String((e&&e.message)||e) }; });
+  advanceFlow(turn);
+}
+async function advanceFlow(turn){
+  if(stepIdx < STEPS.length-1){
+    const next=STEPS[stepIdx+1];
+    if(next && next.followup){ screenThinking(); await Promise.race([turn.analysis, wait(2600)]); }
+    stepIdx++; screenQuestion();
+  } else { screenSynth(); }
+}
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function screenThinking(){ render(`<div class="orb speaking"></div><p class="body" style="text-align:center;margin-top:18px;">One moment…</p>`); }
+function sampleAnswer(){
+  stopSpeak();
+  const turn={ q:curQuestion(), payload:simulate(), live:false, raw:null, pending:false, analysis:Promise.resolve() };
+  turns.push(turn);
+  if(turn.payload._followUp) lastFollowUp=turn.payload._followUp;
+  setBadge(false);
+  if(stepIdx < STEPS.length-1){ stepIdx++; setTimeout(screenQuestion,250); }
+  else screenSynth();
 }
 
 /* ---------- clone synthesis ---------- */
@@ -317,13 +349,14 @@ async function screenSynth(){
   stopSpeak();
   render(`<div class="orb"></div><h1 class="t" style="text-align:center;">Composing your clone</h1><p class="body" style="text-align:center;">Bringing together everything you said, and how you said it.</p>`);
   speak('Give me a moment. I am turning all of that into a version of you.');
+  await Promise.allSettled(turns.map(t=>t.analysis).filter(Boolean));
   let clone=null;
   try{
-    const payload = { turns: turns.map(t=>{
+    const payload = { viewer:VIEWER, turns: turns.map(t=>{
       const v = t.raw && t.raw.velma;
       const transcript = (v && v.clips) ? v.clips.map(c=>c.text).join(' ') : '';
       const acousticEmotion = (v && v.clips) ? v.clips.map(c=>c.emotion).filter(Boolean).join(', ') : '';
-      return { question:t.q, transcript, acousticEmotion, story:t.payload._story||'', personality:t.payload._personality||'', profileLine:t.payload._note||'', emotions:(t.payload.emotions||[]).map(e=>e.label) };
+      return { question:t.q, transcript, acousticEmotion, story:t.payload._story||'', movement:t.payload._movement||'', personality:t.payload._personality||'', profileLine:t.payload._note||'', emotions:(t.payload.emotions||[]).map(e=>e.label) };
     }) };
     const res=await fetch(SYNTH_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await res.json().catch(()=>({}));
@@ -340,7 +373,9 @@ function aggregateClone(){
   const personality = turns.map(t=>t.payload._personality).filter(Boolean).pop() || (emotions.slice(0,3).map(e=>e.label).join(', '));
   const profileLine = turns.map(t=>t.payload._note).filter(Boolean).pop() || 'Someone whose warmth shows in how they speak.';
   const traits = emotions.slice(0,3).map(e=>({name:cap(e.label), phrase:'comes through clearly in how you speak'}));
-  return { cloneStory, personality, profileLine, emotions, traits };
+  const movement = 'Your voice changed as you spoke, steadier on some questions and softer or more guarded on others, and that movement says as much as the words.';
+  const wouldSuit = 'Someone warm and steady, who reads the feeling under your words and does not need you to spell everything out.';
+  return { cloneStory, movement, personality, profileLine, wouldSuit, emotions, traits };
 }
 
 /* ---------- portrait ---------- */
@@ -380,8 +415,10 @@ function screenClone(c){
       <div class="bd">
         <div class="echo">"${cap(c.profileLine||'')}."</div>
         <p class="story" style="font-size:15px;margin:0 0 12px;">${c.cloneStory||''}</p>
+        ${c.movement?`<p class="story" style="font-size:13px;opacity:.82;margin:0 0 12px;"><b>How your feeling moved:</b> ${c.movement}</p>`:''}
         ${c.personality?`<div class="qrow"><div class="qn">In a phrase <span class="newtag">new</span></div><div class="qp">${cap(c.personality)}</div></div>`:''}
         ${traits}
+        ${c.wouldSuit?`<div class="qrow"><div class="qn">Who would suit you <span class="newtag">new</span></div><div class="qp">${c.wouldSuit}</div></div>`:''}
       </div>
     </div>
     <div class="stack"><button class="btn btn-primary" onclick="screenWelcome()">Start over</button></div>
@@ -396,7 +433,7 @@ function fromInterpreted(i){
   return {
     emotions:(i.emotions||[]).filter(e=>e&&e.label).map(e=>({label:e.label,score:typeof e.score==='number'?e.score:0.65})),
     topics:[], behaviors:[], sentiment:0.5,
-    _story:i.story, _note:i.profileLine||i.personality, _personality:i.personality, _followUp:i.followUp
+    _story:i.story, _note:i.profileLine||i.personality, _personality:i.personality, _followUp:i.followUp, _movement:i.movement||''
   };
 }
 function normalize(j){

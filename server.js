@@ -22,6 +22,15 @@ const SYNTH_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 const TTS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
 const STREAMING = process.env.VELMA_STREAMING !== '0'; // default ON here
+const SUBJECT_GENDER = process.env.SUBJECT_GENDER || 'man';
+const SEEKING_GENDER = process.env.SEEKING_GENDER || 'woman';
+function genderNoun(g){ g=String(g||'').toLowerCase(); if(g.startsWith('w')||g==='female'||g==='she') return 'woman'; if(g.startsWith('m')||g==='male'||g==='he') return 'man'; return 'person'; }
+function pronounsFor(g){ const n=genderNoun(g); if(n==='woman') return {subj:'she',obj:'her',poss:'her',noun:'woman'}; if(n==='man') return {subj:'he',obj:'him',poss:'his',noun:'man'}; return {subj:'they',obj:'them',poss:'their',noun:'person'}; }
+function viewerContext(viewer){
+  const g=(viewer&&viewer.gender)||SUBJECT_GENDER, sk=(viewer&&viewer.seeking)||SEEKING_GENDER;
+  const pr=pronounsFor(g), sn=genderNoun(sk), wrong=(pr.noun==='man'?'woman':'man');
+  return "CONTEXT (about pronouns and matching, not the focus of the read): The speaker is a "+pr.noun+". Address them directly as 'you'. Where third person is unavoidable, for example in profileLine, use "+pr.subj+"/"+pr.obj+"/"+pr.poss+". Never refer to the speaker as a "+wrong+" or with the wrong pronoun. The person who would suit them is a "+sn+", so anything about who would suit them or who they are looking for must describe a "+sn+". ";
+}
 const recentLogs = [];
 function logEvent(m){ try{ recentLogs.push(new Date().toISOString()+' '+m); if(recentLogs.length>40) recentLogs.shift(); console.log(m); }catch(e){} }
 const CT_UUID = 'a1b2c3d4-1111-4111-8111-000000000001';
@@ -150,17 +159,19 @@ async function claudeJSON(system, user, primaryModel, maxTokens) {
   throw new Error(lastErr);
 }
 
-async function interpret(velma) {
+async function interpret(velma, viewer) {
   const system =
     "You are the voice-analysis interpreter for First Dates, a thoughtful dating app by The School of Life. " +
     "Everything you write is about who this person is IN A RELATIONSHIP: what they are like to be close to, how they show love and warmth, how they handle conflict, distance and reassurance, what they bring to a partner and what they may need. " +
     "You receive JSON from Velma. The 'clips' are in time order, and each carries an 'emotion' field, Velma's acoustic read of the voice in that moment (e.g. Happy, Calm, Anxious, Affectionate, Sad). With streaming, one answer can contain SEVERAL clips whose emotion shifts as they speak. " +
     "The emotional MOVEMENT across the clips is your most important signal, a hidden language under the words. Track the sequence: where does the feeling change, what were they saying at that exact moment, and what does the shift reveal? A flash of anxiety inside a calm answer, a brightness that deflates, a tenderness that surfaces on one phrase, a steadiness that briefly cracks — these transitions tell you more than any single label. Read like a perceptive therapist tracking the micro-shifts in someone's voice. " +
     "Also weigh the gap between tone and words: where the acoustic emotion and the words diverge (upbeat words in an anxious voice, calm words carrying longing) that gap is where the real feeling lives. Name what they feel but may not be saying. Never just paraphrase the words. " +
+    viewerContext(viewer) +
     "Concrete, human language, not vague clinical words. Insightful and a little generous, never flattering, never a horoscope. Output STRICT JSON only.";
   const shape =
     '{"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}],' +
     '"story":"2 to 3 sentences on how they sounded and what it suggests about them as a partner",' +
+    '"movement":"1 sentence naming how the feeling moved across this answer and what the shift reveals about them in love; if the voice held one steady emotion, give the tone-vs-words read instead",' +
     '"personality":"a vivid 6 to 10 word descriptor of them in relationships",' +
     '"profileLine":"one short third-person line about what they are like to love",' +
     '"followUp":"a warm, specific one-sentence follow-up question about how they are in relationships, based on what they just said"}';
@@ -170,20 +181,23 @@ async function interpret(velma) {
   return parsed;
 }
 
-async function synthesize(turns) {
+async function synthesize(turns, viewer) {
   const system =
-    "You are the clone-builder for First Dates, by The School of Life, with the emotional intelligence of a skilled therapist. " +
-    "For each answer you get: the question, what they SAID (transcript), how they SOUNDED (acousticEmotion, Velma's read of the voice), and a short read. " +
-    "Build a portrait of who this person is IN A RELATIONSHIP by reading between the lines. The most revealing signal is the relationship between voice and words: where they agree it is sincere, and especially where they diverge (warm words in an anxious voice, calm words carrying longing) that gap is where the truth lives. Name what they feel but do not say. " +
-    "Cover how they love and show warmth, how they handle closeness, conflict, distance and reassurance, what they protect, what they long for, what they bring and what they need. " +
-    "Compassionate but honest. Specific, never generic, never a horoscope. Output STRICT JSON only.";
+    "You are the clone-builder for First Dates, by The School of Life. You write with psychological depth and warmth, like a perceptive writer on love. You are building a DATING PROFILE, but an unusually intellectual one: a portrait of who this person actually is to be close to, not a list of hobbies. " +
+    "For each answer you get: the question, what they SAID (transcript), how they SOUNDED (acousticEmotion, which may be a SEQUENCE of emotions in time order, so notice how it moves), a short read, and the per-answer emotional movement. " +
+    "The richest signal is the relationship between voice and words, and how their feeling MOVED across the conversation: where it lifted, where it tightened, where tenderness or anxiety surfaced. Read that movement as a hidden language and infer who they are in love from it. Where voice and words diverge, that gap is where the truth lives. Name what they feel but do not say. " +
+    "Cover how they love and show warmth, how they handle closeness, conflict, distance and reassurance, what they protect, what they long for, what they bring and what they need. Then name, with insight, the kind of person who would genuinely suit them and why. " +
+    viewerContext(viewer) +
+    "Compassionate but honest, intellectually serious, never flattering, never a horoscope. Output STRICT JSON only.";
   const shape =
-    '{"cloneStory":"3 to 4 sentences on what this person is like in a relationship, grounded in the answers",' +
+    '{"cloneStory":"3 to 4 sentences: an intellectually rich portrait of who they are in a relationship, grounded in the answers",' +
+    '"movement":"1 to 2 sentences naming how their feeling moved across the conversation and what that hidden arc reveals about them in love",' +
     '"personality":"a vivid 6 to 10 word descriptor of them as a partner",' +
     '"profileLine":"one evocative third-person line about what they are like to love",' +
+    '"wouldSuit":"one insightful sentence on the kind of person who would genuinely suit them, and why",' +
     '"traits":[{"name":"short relational trait","phrase":"a short, specific phrase about how it shows in closeness"}],' +
     '"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}]}';
-  const user = 'Per-answer data (question, transcript = words, acousticEmotion = how the voice sounded, story = a short read):\n' +
+  const user = 'Per-answer data (question, transcript = words, acousticEmotion = how the voice sounded, story = a short read, movement = how the feeling moved in that answer):\n' +
     JSON.stringify(turns).slice(0, 14000) + '\n\nReturn ONLY JSON in this shape, 3 traits and up to 4 emotions:\n' + shape;
   const parsed = await claudeJSON(system, user, SYNTH_MODEL, 900);
   if (!parsed.cloneStory) throw new Error('synth_bad_shape');
@@ -230,6 +244,7 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
   if (!key) { logEvent('[analyze] no MODULATE_API_KEY'); res.json({ configured: false }); return; }
   const audio = req.body;
   const contentType = req.headers['content-type'] || 'audio/webm';
+  const viewer = { gender: req.headers['x-subject-gender'] || SUBJECT_GENDER, seeking: req.headers['x-seeking-gender'] || SEEKING_GENDER };
   logEvent('[analyze] in bytes=' + (audio && audio.length ? audio.length : 0) + ' ct=' + contentType + ' streaming=' + STREAMING);
   if (!audio || !audio.length || !Buffer.isBuffer(audio)) { logEvent('[analyze] empty/invalid audio body'); res.status(400).json({ error: 'no_audio' }); return; }
   const cfg = velmaConfigObj();
@@ -255,7 +270,7 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
   logEvent('[analyze] velma ok source=' + velma.__source + ' clips=' + ((velma.clips || []).length) + ' ' + (Date.now() - t0) + 'ms');
   let interpreted = null, interpErr;
   if (process.env.ANTHROPIC_API_KEY) {
-    try { interpreted = await interpret(velma); } catch (e) { interpErr = String((e && e.message) || e); logEvent('[analyze] interpret error: ' + interpErr); }
+    try { interpreted = await interpret(velma, viewer); } catch (e) { interpErr = String((e && e.message) || e); logEvent('[analyze] interpret error: ' + interpErr); }
   }
   res.json({ configured: true, velma, interpreted, interpErr });
 });
@@ -263,8 +278,9 @@ app.post('/api/analyze', express.raw({ type: () => true, limit: '25mb' }), async
 app.post('/api/synthesize', express.json({ limit: '1mb' }), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) { res.json({ configured: false }); return; }
   const turns = (req.body && req.body.turns) || [];
+  const viewer = (req.body && req.body.viewer) || {};
   if (!turns.length) { res.status(400).json({ error: 'no_turns' }); return; }
-  try { const clone = await synthesize(turns); res.json({ configured: true, clone }); }
+  try { const clone = await synthesize(turns, viewer); res.json({ configured: true, clone }); }
   catch (e) { res.json({ configured: true, error: String((e && e.message) || e) }); }
 });
 
