@@ -137,7 +137,7 @@ function toggleDebug(){
   const d=document.getElementById('debug'); if(!d) return;
   if(d.style.display!=='none'){ d.style.display='none'; return; }
   d.innerHTML = turns.map((t,i)=>{
-    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : '(simulated answer — no live data)';
+    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : (t.raw && t.raw.__fail) ? ('NOT LIVE — '+t.raw.__fail+'\nrecorded blob: '+t.raw.blobBytes+' bytes, type '+t.raw.blobType) : '(simulated answer — no live data)';
     const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Claude read for this answer)';
     const ce = (t.raw && t.raw.interpErr) ? ('\n\nClaude error: ' + t.raw.interpErr) : '';
     return `<div class="sectlabel">Answer ${i+1} · ${esc(t.q)}</div>
@@ -286,18 +286,19 @@ function screenAnalyzing(){
 
 async function analyze(blob){
   screenAnalyzing();
-  let payload=null, live=false, raw=null;
+  let payload=null, live=false, raw=null, fail='';
   if(blob){
     try{
       const res=await fetch(ANALYZE_URL,{method:'POST',headers:{'Content-Type': blob.type||'audio/webm'},body:blob});
-      const data=await res.json().catch(()=>({}));
+      let data={}; try{ data=await res.json(); }catch(e){ fail='bad json (status '+res.status+')'; }
       if(res.ok && data.configured && data.velma){
         payload = (data.interpreted && data.interpreted.story) ? fromInterpreted(data.interpreted) : normalize(data.velma);
         live=true; raw={ velma:data.velma, interpreted:data.interpreted||null, interpErr:data.interpErr||'' };
-      }
-    }catch(e){}
-  }
-  if(!payload){ payload=simulate(); live=false; }
+      } else if(res.ok && data && data.configured===false){ fail='server says configured:false (no key)'; }
+      else { fail='server '+res.status+': '+((data&&(data.detail||data.error))||'(no detail)'); }
+    }catch(e){ fail='fetch error: '+String(e.message||e); }
+  } else { fail='no audio blob'; }
+  if(!payload){ payload=simulate(); live=false; raw={ __fail:fail, blobBytes: blob?blob.size:0, blobType: blob?blob.type:'' }; }
   setBadge(live);
   recordTurn(payload, live, raw);
 }
