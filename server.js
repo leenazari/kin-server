@@ -43,7 +43,7 @@ const PART_ROLE = {
 
 // The main pipeline uses the minimal, known-good config so streaming and batch both
 // work. The richer conversation-type config is still being validated (see /api/analyze?diag).
-function velmaConfigObj() { return { stt: { emotion_signal: true } }; }
+function velmaConfigObj() { return { stt: { emotion_signal: true }, conversation_types: [CONV_TYPE], participant_roles: [PART_ROLE] }; }
 function richConfigObj() { return { stt: { emotion_signal: true }, default_conversation_type: CT_UUID, conversation_types: [CONV_TYPE], participant_roles: [PART_ROLE] }; }
 
 // ---- Velma streaming (per-utterance emotion) ----
