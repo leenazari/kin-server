@@ -1,4 +1,4 @@
-// First Dates — persistent Node server (for Railway).
+// First Dates - persistent Node server (for Railway).
 // Serves the front end and runs all three APIs. Unlike the serverless version,
 // this can hold a WebSocket open to Velma, so per-utterance streaming emotion works.
 //
@@ -26,10 +26,19 @@ const SUBJECT_GENDER = process.env.SUBJECT_GENDER || 'man';
 const SEEKING_GENDER = process.env.SEEKING_GENDER || 'woman';
 function genderNoun(g){ g=String(g||'').toLowerCase(); if(g.startsWith('w')||g==='female'||g==='she') return 'woman'; if(g.startsWith('m')||g==='male'||g==='he') return 'man'; return 'person'; }
 function pronounsFor(g){ const n=genderNoun(g); if(n==='woman') return {subj:'she',obj:'her',poss:'her',noun:'woman'}; if(n==='man') return {subj:'he',obj:'him',poss:'his',noun:'man'}; return {subj:'they',obj:'them',poss:'their',noun:'person'}; }
-function viewerContext(viewer){
+function deDash(v){
+  if (typeof v === 'string') return v.replace(/\s*[\u2014\u2013]\s*/g, ', ').replace(/\s+,/g, ',').replace(/,\s*,/g, ', ');
+  if (Array.isArray(v)) return v.map(deDash);
+  if (v && typeof v === 'object') { const o = {}; for (const k in v) o[k] = deDash(v[k]); return o; }
+  return v;
+}
+function viewerContext(viewer, person){
   const g=(viewer&&viewer.gender)||SUBJECT_GENDER, sk=(viewer&&viewer.seeking)||SEEKING_GENDER;
   const pr=pronounsFor(g), sn=genderNoun(sk), wrong=(pr.noun==='man'?'woman':'man');
-  return "CONTEXT (about pronouns and matching, not the focus of the read): The speaker is a "+pr.noun+". Address them directly as 'you'. Where third person is unavoidable, for example in profileLine, use "+pr.subj+"/"+pr.obj+"/"+pr.poss+". Never refer to the speaker as a "+wrong+" or with the wrong pronoun. The person who would suit them is a "+sn+", so anything about who would suit them or who they are looking for must describe a "+sn+". ";
+  if(person==='third'){
+    return "CONTEXT: This is a public profile card that OTHERS will read to decide if they might match. Write entirely in the THIRD person about the subject, who is a "+pr.noun+". Use "+pr.subj+"/"+pr.obj+"/"+pr.poss+" throughout. Never address the subject as 'you', and do not use a name. The person who would suit "+pr.obj+" is a "+sn+", described in the third person. ";
+  }
+  return "VOICE: Address the subject directly as 'you' (the subject is a "+pr.noun+"). Never call the subject a "+wrong+" or use the wrong pronoun. Anyone who would suit them is a "+sn+". ";
 }
 const recentLogs = [];
 function logEvent(m){ try{ recentLogs.push(new Date().toISOString()+' '+m); if(recentLogs.length>40) recentLogs.shift(); console.log(m); }catch(e){} }
@@ -40,7 +49,7 @@ const CONV_TYPE = {
   conversation_type_uuid: CT_UUID,
   name: 'Relationship Reflection',
   short_description: 'A person reflecting candidly on themselves in relationships.',
-  detailed_description: 'A single speaker answering questions about who they are in close relationships — how they love, connect, and handle conflict, distance and reassurance. The tone is personal and honest. This is self-reflection, not media narration, an interview, or a service call.',
+  detailed_description: 'A single speaker answering questions about who they are in close relationships - how they love, connect, and handle conflict, distance and reassurance. The tone is personal and honest. This is self-reflection, not media narration, an interview, or a service call.',
 };
 const PART_ROLE = {
   participant_role_uuid: ROLE_UUID,
@@ -152,7 +161,7 @@ async function claudeJSON(system, user, primaryModel, maxTokens) {
       const data = await r.json();
       const out = (data.content && data.content[0] && data.content[0].text) || '';
       const parsed = extractJson(out);
-      if (parsed) return parsed;
+      if (parsed) return deDash(parsed);
       lastErr = 'llm_bad_shape (' + model + ')';
     } catch (e) { lastErr = String((e && e.message) || e) + ' (' + model + ')'; }
   }
@@ -164,9 +173,11 @@ async function interpret(velma, viewer) {
     "You are the voice-analysis interpreter for First Dates, a thoughtful dating app by The School of Life. " +
     "Everything you write is about who this person is IN A RELATIONSHIP: what they are like to be close to, how they show love and warmth, how they handle conflict, distance and reassurance, what they bring to a partner and what they may need. " +
     "You receive JSON from Velma. The 'clips' are in time order, and each carries an 'emotion' field, Velma's acoustic read of the voice in that moment (e.g. Happy, Calm, Anxious, Affectionate, Sad). With streaming, one answer can contain SEVERAL clips whose emotion shifts as they speak. " +
-    "The emotional MOVEMENT across the clips is your most important signal, a hidden language under the words. Track the sequence: where does the feeling change, what were they saying at that exact moment, and what does the shift reveal? A flash of anxiety inside a calm answer, a brightness that deflates, a tenderness that surfaces on one phrase, a steadiness that briefly cracks — these transitions tell you more than any single label. Read like a perceptive therapist tracking the micro-shifts in someone's voice. " +
+    "The emotional MOVEMENT across the clips is your most important signal, a hidden language under the words. Track the sequence: where does the feeling change, what were they saying at that exact moment, and what does the shift reveal? A flash of anxiety inside a calm answer, a brightness that deflates, a tenderness that surfaces on one phrase, a steadiness that briefly cracks - these transitions tell you more than any single label. Read like a perceptive therapist tracking the micro-shifts in someone's voice. " +
     "Also weigh the gap between tone and words: where the acoustic emotion and the words diverge (upbeat words in an anxious voice, calm words carrying longing) that gap is where the real feeling lives. Name what they feel but may not be saying. Never just paraphrase the words. " +
-    viewerContext(viewer) +
+    "Never use em dashes or en dashes. Write with commas, 'and', or full stops. " +
+    viewerContext(viewer, 'third') +
+    "Exception: the followUp field is a question Kin asks the subject directly, so write only followUp in the second person, addressed to them as you. " +
     "Concrete, human language, not vague clinical words. Insightful and a little generous, never flattering, never a horoscope. Output STRICT JSON only.";
   const shape =
     '{"emotions":[{"label":"plain human emotion word","score":0.0_to_1.0}],' +
@@ -187,7 +198,8 @@ async function synthesize(turns, viewer) {
     "For each answer you get: the question, what they SAID (transcript), how they SOUNDED (acousticEmotion, which may be a SEQUENCE of emotions in time order, so notice how it moves), a short read, and the per-answer emotional movement. " +
     "The richest signal is the relationship between voice and words, and how their feeling MOVED across the conversation: where it lifted, where it tightened, where tenderness or anxiety surfaced. Read that movement as a hidden language and infer who they are in love from it. Where voice and words diverge, that gap is where the truth lives. Name what they feel but do not say. " +
     "Cover how they love and show warmth, how they handle closeness, conflict, distance and reassurance, what they protect, what they long for, what they bring and what they need. Then name, with insight, the kind of person who would genuinely suit them and why. " +
-    viewerContext(viewer) +
+    "Never use em dashes or en dashes. Write with commas, 'and', or full stops. " +
+    viewerContext(viewer, 'third') +
     "Compassionate but honest, intellectually serious, never flattering, never a horoscope. Output STRICT JSON only.";
   const shape =
     '{"cloneStory":"3 to 4 sentences: an intellectually rich portrait of who they are in a relationship, grounded in the answers",' +

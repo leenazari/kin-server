@@ -79,9 +79,9 @@
   .profile .bd{padding:6px 18px 18px;}
   .echo{font-style:italic;font-family:'Fraunces',serif;font-size:15px;line-height:1.5;color:var(--ink);margin:10px 0 12px;}
   .newtag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:600;}
-  .qrow{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .qrow{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start;}
   .qrow:last-child{border-bottom:none;}
-  .qrow .qn{font-family:'Fraunces',serif;font-weight:500;font-size:14px;min-width:92px;flex:none;}
+  .qrow .qn{font-family:'Fraunces',serif;font-weight:500;font-size:14px;width:148px;flex:none;line-height:1.35;}
   .qrow .qp{font-size:13px;color:var(--ink-soft);line-height:1.45;}
 
   .footnote{text-align:center;font-size:11px;color:var(--ink-soft);margin-top:24px;line-height:1.6;}
@@ -109,7 +109,7 @@
 
 <script>
 /* ============================================================
-   First Dates — voice profiling -> clone
+   First Dates - voice profiling -> clone
    Kin asks a few questions aloud. Each spoken answer is read by
    Kin + Claude (live) or simulated. The answers accumulate
    into a clone, synthesised by Claude.
@@ -134,11 +134,13 @@ function render(html){ app.innerHTML=''; const d=document.createElement('div'); 
 function cap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
 function fmt(s){ const m=Math.floor(s/60); const r=s%60; return m+':'+(r<10?'0':'')+r; }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function deDash(s){ return String(s==null?'':s).replace(/\s*[\u2014\u2013]\s*/g,', ').replace(/\s+,/g,',').replace(/,\s*,/g,', '); }
+function pron(){ const g=String(VIEWER.gender||'').toLowerCase(); if(g.charAt(0)==='w') return {subj:'she',obj:'her',poss:'her'}; if(g.charAt(0)==='p') return {subj:'they',obj:'them',poss:'their'}; return {subj:'he',obj:'him',poss:'his'}; }
 function toggleDebug(){
   const d=document.getElementById('debug'); if(!d) return;
   if(d.style.display!=='none'){ d.style.display='none'; return; }
   d.innerHTML = turns.map((t,i)=>{
-    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : (t.raw && t.raw.__fail) ? ('NOT LIVE — '+t.raw.__fail+'\nrecorded blob: '+t.raw.blobBytes+' bytes, type '+t.raw.blobType) : '(simulated answer — no live data)';
+    const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : (t.raw && t.raw.__fail) ? ('NOT LIVE - '+t.raw.__fail+'\nrecorded blob: '+t.raw.blobBytes+' bytes, type '+t.raw.blobType) : '(simulated answer - no live data)';
     const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Claude read for this answer)';
     const ce = (t.raw && t.raw.interpErr) ? ('\n\nClaude error: ' + t.raw.interpErr) : '';
     return `<div class="sectlabel">Answer ${i+1} · ${esc(t.q)}</div>
@@ -368,13 +370,14 @@ async function screenSynth(){
 function aggregateClone(){
   const all={}; turns.forEach(t=>(t.payload.emotions||[]).forEach(e=>{ all[e.label]=(all[e.label]||0)+(e.score||0.6); }));
   const emotions=Object.entries(all).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([label,score])=>({label,score:Math.min(0.95, score/Math.max(1,turns.length)+0.18)}));
+  const p=pron();
   const stories=turns.map(t=>t.payload._story).filter(Boolean);
-  const cloneStory = stories.length ? stories.join(' ') : ('Across your answers, your voice carried '+(emotions.slice(0,2).map(e=>e.label).join(' and ')||'warmth')+', steadier in some moments and softer in others. There is more under the surface than the words let on.');
+  const cloneStory = stories.length ? stories.join(' ') : ('Across the conversation, '+p.poss+' voice carried '+(emotions.slice(0,2).map(e=>e.label).join(' and ')||'warmth')+', steadier in some moments and softer in others. There is more under the surface than the words let on.');
   const personality = turns.map(t=>t.payload._personality).filter(Boolean).pop() || (emotions.slice(0,3).map(e=>e.label).join(', '));
-  const profileLine = turns.map(t=>t.payload._note).filter(Boolean).pop() || 'Someone whose warmth shows in how they speak.';
-  const traits = emotions.slice(0,3).map(e=>({name:cap(e.label), phrase:'comes through clearly in how you speak'}));
-  const movement = 'Your voice changed as you spoke, steadier on some questions and softer or more guarded on others, and that movement says as much as the words.';
-  const wouldSuit = 'Someone warm and steady, who reads the feeling under your words and does not need you to spell everything out.';
+  const profileLine = turns.map(t=>t.payload._note).filter(Boolean).pop() || ('Someone whose warmth shows in how '+p.subj+' speaks.');
+  const traits = emotions.slice(0,3).map(e=>({name:cap(e.label), phrase:'comes through clearly in how '+p.subj+' speaks'}));
+  const movement = cap(p.poss)+' feeling shifted as '+p.subj+' spoke, steadier on some questions and softer or more guarded on others, and that movement says as much as the words.';
+  const wouldSuit = 'Someone warm and steady, who reads the feeling under '+p.poss+' words and does not need '+p.obj+' to spell everything out.';
   return { cloneStory, movement, personality, profileLine, wouldSuit, emotions, traits };
 }
 
@@ -403,8 +406,9 @@ function manPortrait(){
 
 function screenClone(c){
   stopSpeak();
+  const P=pron();
   const chips=(c.emotions||[]).slice(0,4).map(e=>`<span class="chip">${e.label}${typeof e.score==='number'?`<span class="lvl"><i style="width:${Math.round(e.score*100)}%"></i></span>`:''}</span>`).join('');
-  const traits=(c.traits||[]).map(t=>`<div class="qrow"><div class="qn">${cap(t.name)}</div><div class="qp">${t.phrase}</div></div>`).join('');
+  const traits=(c.traits||[]).map(t=>`<div class="qrow"><div class="qn">${cap(deDash(t.name))}</div><div class="qp">${deDash(t.phrase)}</div></div>`).join('');
   render(`
     <div class="kicker">${flowLive?'Built live from your voice':'Sample clone'}</div>
     <h1 class="t">Your clone</h1>
@@ -413,12 +417,12 @@ function screenClone(c){
     <div class="profile">
       <div class="head"><div class="pic">${manPortrait()}</div><div><div class="nm">Alex</div><div class="sub">Built from ${turns.length} answers, by how you sound</div></div></div>
       <div class="bd">
-        <div class="echo">"${cap(c.profileLine||'')}."</div>
-        <p class="story" style="font-size:15px;margin:0 0 12px;">${c.cloneStory||''}</p>
-        ${c.movement?`<p class="story" style="font-size:13px;opacity:.82;margin:0 0 12px;"><b>How your feeling moved:</b> ${c.movement}</p>`:''}
-        ${c.personality?`<div class="qrow"><div class="qn">In a phrase <span class="newtag">new</span></div><div class="qp">${cap(c.personality)}</div></div>`:''}
+        <div class="echo">"${cap(deDash(c.profileLine||''))}."</div>
+        <p class="story" style="font-size:15px;margin:0 0 12px;">${deDash(c.cloneStory||'')}</p>
+        ${c.movement?`<p class="story" style="font-size:13px;opacity:.82;margin:0 0 12px;"><b>How ${P.poss} feeling moved:</b> ${deDash(c.movement)}</p>`:''}
+        ${c.personality?`<div class="qrow"><div class="qn">In a phrase <span class="newtag">new</span></div><div class="qp">${cap(deDash(c.personality))}</div></div>`:''}
         ${traits}
-        ${c.wouldSuit?`<div class="qrow"><div class="qn">Who would suit you <span class="newtag">new</span></div><div class="qp">${c.wouldSuit}</div></div>`:''}
+        ${c.wouldSuit?`<div class="qrow"><div class="qn">Who would suit ${P.obj} <span class="newtag">new</span></div><div class="qp">${deDash(c.wouldSuit)}</div></div>`:''}
       </div>
     </div>
     <div class="stack"><button class="btn btn-primary" onclick="screenWelcome()">Start over</button></div>
@@ -472,7 +476,7 @@ async function checkServer(){
     const r=await fetch(ANALYZE_URL); const d=await r.json();
     const el=document.getElementById('srv'); if(!el) return;
     if(d && d.velmaKey){ el.textContent='Kin ready'+(d.llmKey?' · deep read on':'')+(d.ttsKey?' · voice on':' · browser voice'); el.style.color='var(--good)'; }
-    else { el.textContent='Kin is not connected — set MODULATE_API_KEY and redeploy'; el.style.color='#a9762a'; }
+    else { el.textContent='Kin is not connected - set MODULATE_API_KEY and redeploy'; el.style.color='#a9762a'; }
   }catch(e){}
 }
 screenWelcome(); setBadge(false); checkServer();
