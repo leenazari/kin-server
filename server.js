@@ -329,6 +329,9 @@ app.post('/api/tts', express.json({ limit: '200kb' }), async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'tts_failure', detail: String((e && e.message) || e) }); }
 });
 
+// shareable pitch walkthrough (also served as /walkthrough.html by static)
+app.get('/walkthrough', (req, res) => res.sendFile(path.join(__dirname, 'public', 'walkthrough.html')));
+
 // static front end
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

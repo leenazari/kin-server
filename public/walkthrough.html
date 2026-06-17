@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>First Dates · Platform Walkthrough</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+  :root{
+    --ink:#23201c;--ink-soft:#5b554d;--cream:#f6f1e7;--cream-2:#efe7d8;--paper:#fffdf8;
+    --accent:#b5532f;--accent-2:#2f6d6a;--gold:#c8943b;--line:#e2d8c5;--good:#2f6d6a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:#2b2722;-webkit-font-smoothing:antialiased;}
+  .serif{font-family:'Fraunces',Georgia,serif;}
+
+  .app{display:flex;min-height:100vh;}
+  /* prototype sidebar */
+  .side{width:248px;flex:none;background:#211d19;color:#d8cdb8;padding:22px 18px;overflow:auto;}
+  .side .brand{font-family:'Fraunces',serif;font-weight:600;font-size:21px;letter-spacing:.16em;color:#fff;}
+  .side .brand small{display:block;font-family:'Inter';font-weight:500;font-size:9px;letter-spacing:.22em;color:#9a8f78;text-transform:uppercase;margin-top:4px;}
+  .side .kicker{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8a7f68;margin:26px 0 10px;}
+  .grp{margin-bottom:16px;}
+  .grp h4{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#b6a888;margin:0 0 8px;}
+  .navitem{display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:8px;font-size:13px;color:#c8bca2;cursor:pointer;transition:.12s;}
+  .navitem:hover{background:#2c281f;color:#fff;}
+  .navitem.active{background:var(--accent);color:#fff;}
+  .navitem .d{width:6px;height:6px;border-radius:50%;background:#5d5446;flex:none;}
+  .navitem.active .d{background:#fff;}
+
+  /* canvas */
+  .canvas{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px 90px;position:relative;}
+  .screenlabel{position:absolute;top:22px;left:0;right:0;text-align:center;color:#a99e86;font-size:12px;letter-spacing:.1em;}
+  .screenlabel b{color:#f3ecdd;font-weight:600;}
+
+  /* phone frame */
+  .phone{
+    width:380px;height:800px;max-height:82vh;border-radius:46px;background:#0e0c0a;
+    padding:13px;box-shadow:0 40px 90px -30px rgba(0,0,0,.7), inset 0 0 0 2px #322c25;position:relative;
+  }
+  .screen{width:100%;height:100%;border-radius:34px;overflow:hidden;background:var(--cream);position:relative;display:flex;flex-direction:column;}
+  .notch{position:absolute;top:13px;left:50%;transform:translateX(-50%);width:120px;height:26px;background:#0e0c0a;border-radius:0 0 16px 16px;z-index:20;}
+  .statusbar{height:42px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 24px 6px;font-size:12px;font-weight:600;color:var(--ink);z-index:10;}
+  .statusbar .r{display:flex;gap:5px;align-items:center;}
+  .statusbar svg{display:block;}
+  .scrollarea{flex:1;overflow:auto;}
+  .scrollarea::-webkit-scrollbar{width:0;}
+
+  /* desktop frame */
+  .desktop{width:min(1080px,94vw);height:min(660px,80vh);border-radius:14px;background:#0e0c0a;padding:0;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);overflow:hidden;display:flex;flex-direction:column;}
+  .dtbar{height:38px;background:#1c1813;display:flex;align-items:center;gap:7px;padding:0 14px;flex:none;}
+  .dtbar i{width:11px;height:11px;border-radius:50%;background:#4a4239;}
+  .dtbar .url{margin-left:14px;background:#2a251f;color:#a99e86;font-size:11px;padding:5px 14px;border-radius:7px;flex:1;max-width:360px;}
+  .dtscreen{flex:1;background:var(--cream);overflow:auto;}
+
+  /* nav controls */
+  .controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:40;background:#211d19;border:1px solid #38312a;border-radius:999px;padding:8px 10px;}
+  .controls button{cursor:pointer;border:none;background:#322c25;color:#e7ddca;border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;font-family:'Inter';transition:.14s;}
+  .controls button:hover{background:var(--accent);color:#fff;}
+  .controls .count{color:#a99e86;font-size:12px;padding:0 8px;min-width:74px;text-align:center;}
+
+  /* ====== in-product UI components ====== */
+  .pad{padding:8px 26px 26px;}
+  .center{display:flex;flex-direction:column;height:100%;}
+  h1.t{font-family:'Fraunces',serif;font-weight:500;font-size:29px;line-height:1.12;margin:0 0 12px;letter-spacing:-.01em;}
+  h2.t{font-family:'Fraunces',serif;font-weight:500;font-size:23px;line-height:1.15;margin:0 0 10px;}
+  p.body{font-size:14.5px;line-height:1.55;color:var(--ink-soft);margin:0 0 14px;}
+  .small{font-size:12px;color:var(--ink-soft);}
+  .kicker2{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:12px;}
+
+  .btn{display:block;width:100%;text-align:center;border:none;border-radius:999px;padding:15px;font-family:'Inter';font-size:15px;font-weight:600;cursor:pointer;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 12px 24px -12px rgba(181,83,47,.7);}
+  .btn-soft{background:var(--paper);color:var(--ink);border:1px solid var(--line);}
+  .btn-dark{background:var(--ink);color:#fff;}
+  .link{display:block;text-align:center;font-size:13.5px;color:var(--ink-soft);margin-top:14px;}
+  .stack{display:flex;flex-direction:column;gap:11px;}
+
+  .orb{width:120px;height:120px;border-radius:50%;position:relative;margin:0 auto;
+    background:radial-gradient(circle at 32% 30%, #7fb7b2, var(--accent-2) 60%, #1f4e4b 100%);
+    box-shadow:0 0 0 10px rgba(47,109,106,.1), inset 0 0 22px rgba(255,255,255,.25);animation:breathe 4s ease-in-out infinite;}
+  .orb.sm{width:64px;height:64px;}
+  .orb.sam{background:radial-gradient(circle at 32% 30%, #e7a98c, var(--accent) 60%, #7c3318 100%);box-shadow:0 0 0 10px rgba(181,83,47,.1), inset 0 0 22px rgba(255,255,255,.25);}
+  .orb::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 65% 70%, rgba(255,255,255,.35), transparent 45%);}
+  @keyframes breathe{0%,100%{transform:scale(1);}50%{transform:scale(1.04);}}
+
+  .field{border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:13px 15px;margin-bottom:11px;}
+  .field label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;}
+  .field .val{font-size:15px;color:var(--ink);}
+  .field .val.ph{color:#b3a88f;}
+
+  .choice{border:1px solid var(--line);background:var(--paper);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px;}
+  .choice.sel{border-color:var(--accent);background:#fff7f1;box-shadow:0 0 0 1px var(--accent) inset;}
+  .choice .ic{width:38px;height:38px;border-radius:10px;background:var(--cream-2);display:flex;align-items:center;justify-content:center;font-size:19px;flex:none;}
+  .choice h3{margin:0 0 2px;font-family:'Fraunces',serif;font-weight:500;font-size:16px;}
+  .choice p{margin:0;font-size:12.5px;color:var(--ink-soft);}
+  .choice .tick{margin-left:auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;}
+  .choice.sel .tick{background:var(--accent);border-color:var(--accent);}
+
+  .speechcard{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px 18px;margin:0 22px;}
+  .speechcard .who{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);font-weight:600;margin-bottom:7px;}
+  .speechcard p{margin:0;font-family:'Fraunces',serif;font-size:19px;line-height:1.32;}
+
+  .micbtn{width:74px;height:74px;border-radius:50%;background:var(--accent);margin:0 auto;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 30px -10px rgba(181,83,47,.7);}
+  .micbtn.live{background:#fff;border:3px solid var(--accent);}
+  .wave{display:flex;gap:4px;align-items:center;justify-content:center;height:30px;}
+  .wave i{width:4px;border-radius:3px;background:var(--accent-2);animation:wv 1s ease-in-out infinite;}
+  @keyframes wv{0%,100%{height:8px;}50%{height:26px;}}
+  .bubble{background:var(--cream-2);border-radius:16px 16px 16px 5px;padding:13px 16px;font-size:14px;line-height:1.5;color:var(--ink);margin:0 22px;}
+
+  .trait{margin-bottom:13px;}
+  .trait .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .trait .top b{font-family:'Fraunces',serif;font-weight:500;font-size:14.5px;}
+  .trait .top span{font-size:11.5px;color:var(--ink-soft);}
+  .bar{height:8px;border-radius:6px;background:var(--cream-2);overflow:hidden;}
+  .bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent-2),var(--gold));}
+  .bar i.sam{background:linear-gradient(90deg,#b5532f,var(--gold));}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
+  .chip{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;color:var(--ink-soft);background:var(--paper);}
+  .echo{font-style:italic;font-family:'Fraunces',serif;font-size:15.5px;line-height:1.45;color:var(--ink);}
+  /* qualitative portrait rows (no scale, nothing to game) */
+  .qrow{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--line);align-items:baseline;}
+  .qrow:last-child{border-bottom:none;}
+  .qrow .qn{font-family:'Fraunces',serif;font-weight:500;font-size:15px;min-width:104px;flex:none;color:var(--ink);}
+  .qrow .qp{font-size:13.5px;line-height:1.5;color:var(--ink-soft);}
+  .qrow .qp em{font-style:normal;font-weight:600;}
+  .qrow .qp .meet{color:var(--good);}
+  .qrow .qp .tend{color:#a9762a;}
+  .reading{display:flex;flex-direction:column;gap:2px;}
+  .reading .rline{font-family:'Fraunces',serif;font-size:16px;color:var(--ink);padding:9px 0;border-bottom:1px solid var(--line);opacity:.9;}
+  .reading .rline:last-child{border-bottom:none;}
+
+  .tabbar{height:64px;flex:none;border-top:1px solid var(--line);background:var(--paper);display:flex;align-items:center;justify-content:space-around;padding-bottom:8px;}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:#a99e86;}
+  .tab.active{color:var(--accent);}
+  .tab .ic{width:22px;height:22px;}
+
+  .matchcard{border-radius:20px;overflow:hidden;border:1px solid var(--line);background:var(--paper);box-shadow:0 18px 40px -26px rgba(40,30,15,.5);}
+  .matchphoto{height:300px;background:linear-gradient(160deg,#d9b8a4,#b5532f 75%);position:relative;display:flex;align-items:flex-end;}
+  .matchphoto .sil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+  .matchphoto .meta{position:relative;z-index:2;padding:18px 18px 16px;color:#fff;background:linear-gradient(transparent,rgba(60,25,10,.78));width:100%;}
+  .matchphoto .meta h2{font-family:'Fraunces',serif;font-weight:500;font-size:24px;margin:0;}
+  .matchphoto .meta p{margin:3px 0 0;font-size:13px;opacity:.92;}
+  .signal{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2);font-weight:600;}
+
+  .ring{width:128px;height:128px;margin:0 auto;position:relative;}
+  .ring svg{transform:rotate(-90deg);}
+  .ring .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .ring .num b{font-family:'Fraunces',serif;font-size:34px;line-height:1;}
+  .ring .num span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);}
+
+  .twin{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .twin .tg{font-size:10px;color:var(--ink-soft);width:30px;}
+  .twin .bar{flex:1;}
+  .block{border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin:0 22px 12px;background:var(--paper);}
+  .block h4{margin:0 0 5px;font-family:'Fraunces';font-weight:500;font-size:15px;}
+  .block.good h4{color:var(--good);}.block.watch h4{color:#a9762a;}
+  .block p{margin:0;font-size:13px;line-height:1.5;color:var(--ink-soft);}
+  .block .q{margin-top:7px;font-style:italic;font-family:'Fraunces';font-size:13.5px;color:var(--ink);}
+
+  /* desktop dashboard layout */
+  .dash{display:grid;grid-template-columns:300px 1fr;gap:0;height:100%;}
+  .dash .lcol{background:linear-gradient(170deg,#fffdf8,#f2ebdb);border-right:1px solid var(--line);padding:30px 26px;overflow:auto;}
+  .dash .rcol{padding:30px 34px;overflow:auto;}
+  .dash .dbrand{font-family:'Fraunces';font-weight:600;letter-spacing:.16em;font-size:18px;margin-bottom:26px;}
+  .dash .dbrand small{display:block;font-size:8px;letter-spacing:.2em;color:var(--ink-soft);text-transform:uppercase;margin-top:3px;}
+  .dash h1{font-family:'Fraunces';font-weight:500;font-size:27px;margin:0 0 6px;}
+  .dnav{display:flex;gap:22px;border-bottom:1px solid var(--line);margin:18px 0 22px;}
+  .dnav span{font-size:13px;color:var(--ink-soft);padding-bottom:10px;}
+  .dnav span.on{color:var(--accent);border-bottom:2px solid var(--accent);font-weight:600;}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  .panel{border:1px solid var(--line);border-radius:14px;padding:18px 20px;background:var(--paper);}
+  .panel h3{margin:0 0 12px;font-family:'Fraunces';font-weight:500;font-size:16px;}
+  .narr{font-size:13.5px;line-height:1.6;color:var(--ink-soft);}
+  .conv-item{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-soft);}
+  .conv-item:last-child{border-bottom:none;}
+  .dot2{width:7px;height:7px;border-radius:50%;background:var(--accent-2);flex:none;}
+
+  .stagerow{display:flex;gap:14px;align-items:flex-start;position:relative;padding-bottom:18px;}
+  .stagerow .mk{width:16px;display:flex;flex-direction:column;align-items:center;flex:none;align-self:stretch;}
+  .stagerow .mk .pt{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent-2);background:var(--paper);flex:none;}
+  .stagerow.done .mk .pt{background:var(--accent-2);}
+  .stagerow.now .mk .pt{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px rgba(181,83,47,.16);}
+  .stagerow.next .mk .pt{border-color:var(--line);}
+  .stagerow .mk .ln{width:2px;flex:1;background:var(--line);margin-top:3px;min-height:20px;}
+  .stagerow:last-child .mk .ln{display:none;}
+  .stagerow .body2 .lb{font-family:'Fraunces',serif;font-size:15.5px;color:var(--ink);line-height:1.25;}
+  .stagerow.next .body2 .lb{color:var(--ink-soft);}
+  .stagerow .body2 .tg{font-size:11px;letter-spacing:.04em;margin-top:2px;}
+  .stagerow.done .body2 .tg{color:var(--good);}
+  .stagerow.now .body2 .tg{color:var(--accent);font-weight:600;}
+  .stagerow.next .body2 .tg{color:var(--ink-soft);}
+  .tapcue{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);background:#211d19;color:#e7ddca;font-size:11px;letter-spacing:.07em;padding:7px 14px;border-radius:999px;z-index:45;pointer-events:none;animation:cuepulse 1.7s ease-in-out infinite;}
+  @keyframes cuepulse{0%,100%{opacity:.4;}50%{opacity:.95;}}
+  .clickable{cursor:pointer;}
+  @media(max-width:880px){.side{display:none;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand" style="letter-spacing:.04em;">First Dates<small>by The School of Life</small></div>
+    <div class="kicker">Platform walkthrough</div>
+    <div id="nav"></div>
+  </aside>
+  <main class="canvas">
+    <div class="screenlabel" id="screenlabel"></div>
+    <div id="frame"></div>
+  </main>
+</div>
+<div class="controls">
+  <button onclick="go(-1)">‹ Prev</button>
+  <span class="count" id="count"></span>
+  <button onclick="go(1)">Next ›</button>
+</div>
+
+<script>
+const STATUS = `<div class="statusbar"><span>9:41</span><span class="r">
+  <svg width="17" height="11" viewBox="0 0 17 11"><g fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></g></svg>
+  <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.2c2 0 3.8.8 5.1 2l1.2-1.3A9 9 0 0 0 8 .3 9 9 0 0 0 1.7 2.9L3 4.2A7 7 0 0 1 8 2.2Z"/><path d="M8 5.4c1.1 0 2.1.4 2.8 1.2l1.2-1.3A6 6 0 0 0 8 3.6a6 6 0 0 0-4 1.7l1.2 1.3A4 4 0 0 1 8 5.4Z"/><circle cx="8" cy="9" r="1.6"/></svg>
+  <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="2" height="5" rx="1" fill="currentColor" opacity=".5"/></svg>
+</span></div>`;
+
+const STATUS_LIGHT = STATUS.replace('class="statusbar"','class="statusbar" style="color:#fff"');
+
+function tabbar(active){
+  const items=[['Home','home'],['Matches','match'],['Profile','profile'],['Kin','kin']];
+  const ic={
+    home:'<path d="M3 11 12 3l9 8" /><path d="M5 10v10h14V10"/>',
+    match:'<path d="M12 21s-7-4.6-9.3-9C1 8.8 2.4 5 6 5c2 0 3 1.2 4 2.5C11 6.2 12 5 14 5c3.6 0 5 3.8 3.3 7-2.3 4.4-9.3 9-9.3 9Z"/>',
+    profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+    kin:'<circle cx="12" cy="12" r="9"/>'
+  };
+  return `<div class="tabbar">${items.map(([n,k])=>`
+    <div class="tab ${k===active?'active':''}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ic[k]}</svg>${n}</div>`).join('')}</div>`;
+}
+
+function trait(name,val,word){return `<div class="trait"><div class="top"><b>${name}</b><span>${word}</span></div><div class="bar"><i style="width:${val}%"></i></div></div>`;}
+function quality(name,phrase){return `<div class="qrow"><div class="qn">${name}</div><div class="qp">${phrase}</div></div>`;}
+function stage(label,tag,state){return `<div class="stagerow ${state}"><div class="mk"><div class="pt"></div><div class="ln"></div></div><div class="body2"><div class="lb">${label}</div><div class="tg">${tag}</div></div></div>`;}
+function portrait(o){o=o||{};
+  const sex=o.sex||'f';
+  const skin=o.skin||(sex==='m'?'#e3b08a':'#f3cbac');
+  const skinSh=o.skinSh||(sex==='m'?'#c5895f':'#dca682');
+  const hair=o.hair||(sex==='m'?'#33271b':'#46291a');
+  const shirt=o.shirt||(sex==='m'?'#3f5660':'#b0697a');
+  const lip=o.lip||(sex==='m'?'#bd7e63':'#c4615f');
+  const bg1=o.bg1||(sex==='m'?'#dde6e6':'#efdfce'), bg2=o.bg2||(sex==='m'?'#b9c6c7':'#d8b69b');
+  const id=Math.random().toString(36).slice(2,8);
+  const longHair = sex==='f' ? `<path d="M46 252c-2-80 8-130 18-152 6 28 14 44 36 44s30-16 36-44c10 22 20 72 18 152z" fill="${hair}"/>` : '';
+  const frontHair = sex==='m'
+    ? `<path d="M58 112c-3-34 20-54 42-54s45 20 42 54c-7-18-13-26-24-26-5 7-29 8-39 2-8 3-17 8-21 24z" fill="${hair}"/>`
+    : `<path d="M55 118c-5-42 23-62 45-62s50 20 45 62c-3-24-7-32-12-37-9 12-20 16-37 16-7 5-15 3-21-2-11 7-16 13-20 23z" fill="${hair}"/>`;
+  const lashes = sex==='f' ? `<path d="M75 115q9-6 18 -1M107 114q9-5 18 1" stroke="#2c1d12" stroke-width="2" fill="none" stroke-linecap="round"/>` : '';
+  const stubble = sex==='m' ? `<path d="M66 130c4 22 17 34 34 34s30-12 34-34c-5 14-18 22-34 22s-29-8-34-22z" fill="${skinSh}" opacity=".3"/>` : '';
+  const mouth = sex==='f'
+    ? `<path d="M87 145q13 7 26 0q-13 11-26 0z" fill="${lip}"/>`
+    : `<path d="M88 147q12 7 24 0" stroke="${lip}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+  const blush = sex==='f' ? `<ellipse cx="74" cy="133" rx="8" ry="5" fill="#e58b7a" opacity=".22"/><ellipse cx="126" cy="133" rx="8" ry="5" fill="#e58b7a" opacity=".22"/>` : '';
+  return `<svg viewBox="0 0 200 250" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block">
+    <defs>
+      <linearGradient id="bg${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg1}"/><stop offset="1" stop-color="${bg2}"/></linearGradient>
+      <radialGradient id="fc${id}" cx="42%" cy="38%" r="68%"><stop offset="0" stop-color="${skin}"/><stop offset="1" stop-color="${skinSh}"/></radialGradient>
+    </defs>
+    <rect width="200" height="250" fill="url(#bg${id})"/>
+    ${longHair}
+    <path d="M26 250c0-48 34-68 74-68s74 20 74 68z" fill="${shirt}"/>
+    <path d="M88 160h24v24c0 9-24 9-24 0z" fill="${skinSh}"/>
+    <ellipse cx="56" cy="120" rx="8" ry="12" fill="${skin}"/><ellipse cx="144" cy="120" rx="8" ry="12" fill="${skin}"/>
+    <path d="M58 114c0-31 18-54 42-54s42 23 42 54c0 35-20 62-42 62s-42-27-42-62z" fill="url(#fc${id})"/>
+    ${stubble}
+    ${frontHair}
+    <path d="M74 108q11-6 21-1" stroke="${hair}" stroke-width="${sex==='m'?4:3}" fill="none" stroke-linecap="round"/>
+    <path d="M105 107q11-5 21 1" stroke="${hair}" stroke-width="${sex==='m'?4:3}" fill="none" stroke-linecap="round"/>
+    <ellipse cx="84" cy="120" rx="9" ry="6" fill="#fff"/><ellipse cx="116" cy="120" rx="9" ry="6" fill="#fff"/>
+    <circle cx="85" cy="120" r="4.2" fill="#5b3a24"/><circle cx="115" cy="120" r="4.2" fill="#5b3a24"/>
+    <circle cx="85" cy="120" r="1.7" fill="#160f08"/><circle cx="115" cy="120" r="1.7" fill="#160f08"/>
+    ${lashes}
+    <path d="M100 124v11l-5 4" stroke="${skinSh}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    ${blush}
+    ${mouth}
+  </svg>`;}
+
+/* ---------------- SCREENS ---------------- */
+const SCREENS=[
+/* ---- A. Onboarding ---- */
+{sec:'Onboarding',name:'Welcome',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 90% at 50% 8%, #fbf7ee, #efe3cf);">
+    ${STATUS}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 34px;">
+      <div class="orb" style="margin-bottom:30px;"></div>
+      <div class="serif" style="font-size:34px;letter-spacing:.02em;">First Dates</div>
+      <div class="small" style="letter-spacing:.22em;text-transform:uppercase;margin:8px 0 22px;">by The School of Life</div>
+      <p class="serif" style="font-size:21px;line-height:1.4;color:var(--ink);margin:0 0 8px;">Meet and connect<br>at depth.</p>
+    </div>
+    <div class="pad">
+      <button class="btn btn-primary">Begin</button>
+      <span class="link">I already have an account</span>
+    </div>
+  </div>`},
+
+{sec:'Onboarding',name:'How it works',frame:'phone',chrome:false,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">A different kind of introduction</div>
+      <h1 class="t">Most apps help you meet. We help you know.</h1>
+      <div class="stack" style="margin-top:18px;">
+        <div class="choice"><div class="ic">🗣️</div><div><h3>Talk with Kin</h3><p>A short conversation. Some of it deliberately unexpected.</p></div></div>
+        <div class="choice"><div class="ic">✨</div><div><h3>We build your profile</h3><p>How you really move through closeness, in your own words.</p></div></div>
+        <div class="choice"><div class="ic">🤍</div><div><h3>Meet at depth</h3><p>Discover who truly fits, before the awkward first date.</p></div></div>
+      </div>
+    </div>
+    <div class="pad"><button class="btn btn-primary">Continue</button></div>
+  </div>`},
+
+{sec:'Onboarding',name:'Create account',frame:'phone',chrome:false,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <h1 class="t">Create your account</h1>
+      <p class="body">A calm, private space. No swiping, no scoring of looks.</p>
+      <div class="field"><label>First name</label><div class="val">Alex</div></div>
+      <div class="field"><label>Email</label><div class="val">alex@email.com</div></div>
+      <div class="field"><label>Password</label><div class="val">••••••••••</div></div>
+      <button class="btn btn-primary" style="margin-top:6px;">Create account</button>
+      <div style="display:flex;align-items:center;gap:12px;margin:16px 0;"><div style="flex:1;height:1px;background:var(--line);"></div><span class="small">or</span><div style="flex:1;height:1px;background:var(--line);"></div></div>
+      <div class="stack">
+        <button class="btn btn-soft"> Continue with Apple</button>
+        <button class="btn btn-soft">Continue with Google</button>
+      </div>
+      <span class="link">By continuing you agree to our terms and privacy promise.</span>
+    </div>
+  </div>`},
+
+{sec:'Onboarding',name:'Intentions',frame:'phone',chrome:false,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">Step 1 of 2</div>
+      <h1 class="t">What are you here for?</h1>
+      <p class="body">You can change this any time. Kin reads each differently.</p>
+      <div class="stack">
+        <div class="choice sel"><div class="ic">❤️</div><div><h3>Love</h3><p>A relationship with a long horizon.</p></div><div class="tick"></div></div>
+        <div class="choice"><div class="ic">🌿</div><div><h3>Friendship</h3><p>Deep, real connection without romance.</p></div><div class="tick"></div></div>
+        <div class="choice"><div class="ic">✺</div><div><h3>Both, let's see</h3><p>Open to whatever depth finds you.</p></div><div class="tick"></div></div>
+      </div>
+    </div>
+    <div class="pad"><button class="btn btn-primary">Continue</button></div>
+  </div>`},
+
+{sec:'Onboarding',name:'Microphone',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 80% at 50% 12%, #fbf7ee, #efe3cf);">
+    ${STATUS}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 34px;">
+      <div class="orb sm" style="margin-bottom:24px;"></div>
+      <h1 class="t" style="font-size:25px;">Kin would like to listen</h1>
+      <p class="body" style="text-align:center;">Your profile is built by talking, not by filling in forms. Everything you say is private to you, and you can delete it at any moment.</p>
+    </div>
+    <div class="pad stack">
+      <button class="btn btn-primary">Enable microphone</button>
+      <button class="btn btn-soft">Maybe later</button>
+    </div>
+  </div>`},
+
+/* ---- B. Building your profile ---- */
+{sec:'Building your profile',name:'Profile intro',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 80% at 50% 14%, #f1f6f4, #e7ded0);">
+    ${STATUS}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 32px;">
+      <div class="orb" style="margin-bottom:26px;"></div>
+      <h1 class="t" style="font-size:26px;">Let's build your profile</h1>
+      <p class="body" style="text-align:center;">I'll ask you a few questions. Some ordinary, some a little unexpected. There are no right answers, just talk to me as you would a thoughtful friend.</p>
+    </div>
+    <div class="pad"><button class="btn btn-primary">I'm ready</button><span class="link">This usually takes about five minutes</span></div>
+  </div>`},
+
+{sec:'Building your profile',name:'Kin asks',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 70% at 50% 6%, #f1f6f4, #ece3d4);">
+    ${STATUS}
+    <div style="padding:14px 0 6px;text-align:center;"><div class="orb" style="width:96px;height:96px;"></div><div class="small" style="margin-top:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);">Kin is speaking</div></div>
+    <div style="flex:1;display:flex;align-items:center;">
+      <div class="speechcard"><div class="who">Getting to know you · 1 of 5</div><p>Tell me about a recent day that felt like a good one. What were you actually doing?</p></div>
+    </div>
+    <div style="padding:0 26px 30px;text-align:center;">
+      <div class="wave" style="margin-bottom:16px;"><i style="animation-delay:0s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.05s"></i></div>
+      <div class="micbtn"><svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="#fff" stroke-width="1.8"/><line x1="12" y1="17" x2="12" y2="21" stroke="#fff" stroke-width="1.8"/></svg></div>
+      <div class="small" style="margin-top:12px;">Tap to answer</div>
+    </div>
+  </div>`},
+
+{sec:'Building your profile',name:'You answer',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 70% at 50% 6%, #f6efe6, #ece3d4);">
+    ${STATUS}
+    <div style="padding:14px 0 6px;text-align:center;"><div class="orb" style="width:96px;height:96px;box-shadow:0 0 0 12px rgba(181,83,47,.14), inset 0 0 22px rgba(255,255,255,.25);"></div><div class="small" style="margin-top:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);">Listening</div></div>
+    <div style="flex:1;display:flex;align-items:center;">
+      <div class="bubble">“We cooked dinner at my place, four of us, and just ended up laughing about nothing until midnight. I felt completely myself…”</div>
+    </div>
+    <div style="padding:0 26px 30px;text-align:center;">
+      <div class="wave" style="margin-bottom:16px;"><i style="background:var(--accent);animation-delay:0s"></i><i style="background:var(--accent);animation-delay:.12s"></i><i style="background:var(--accent);animation-delay:.24s"></i><i style="background:var(--accent);animation-delay:.32s"></i><i style="background:var(--accent);animation-delay:.18s"></i></div>
+      <div class="micbtn live"><svg width="22" height="22" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3" fill="#b5532f"/></svg></div>
+      <div class="small" style="margin-top:12px;">Tap to finish</div>
+    </div>
+  </div>`},
+
+{sec:'Building your profile',name:'Composing',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 80% at 50% 12%, #f1f6f4, #e7ded0);">
+    ${STATUS}
+    <div style="padding:24px 0 8px;text-align:center;"><div class="orb"></div></div>
+    <div class="scrollarea pad" style="text-align:center;">
+      <h2 class="t" style="margin-top:6px;">Reading between your words</h2>
+      <p class="body" style="text-align:center;">Listening to what you said, and to how you said it.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin:4px 0 14px;">
+        <span class="chip">warmth in your voice</span><span class="chip">candour</span><span class="chip">a flicker of nerves</span>
+      </div>
+      <div class="reading" style="text-align:left;margin-top:2px;">
+        <div class="rline">Quick to warmth, slow to perform it…</div>
+        <div class="rline">Steady when the weather turns…</div>
+        <div class="rline">Mends rather than keeps score…</div>
+        <div class="rline">Keeps a few doors shut until it is safe…</div>
+      </div>
+    </div>
+  </div>`},
+
+/* ---- C. Your profile ---- */
+{sec:'Your profile',name:'Your clone',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">Your profile</div>
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:18px;">
+        <div style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:1px solid var(--line);flex:none;">${portrait({sex:'m'})}</div>
+        <div><div class="serif" style="font-size:20px;">Alex</div><div class="small">A version of you, ready to meet someone.</div></div>
+      </div>
+      <div class="echo" style="margin-bottom:14px;">“Warm and quick to laugh, steady when it counts, and a little slow to show the whole of yourself.”</div>
+      <div style="margin-bottom:14px;">
+        ${quality('Warmth','You show care through what you do, dinners cooked, people remembered.')}
+        ${quality('Steadiness','The calm one when life turns hard.')}
+        ${quality('Repair','You would rather mend than win.')}
+        ${quality('Openness','You keep a few doors shut until trust runs deep.')}
+        ${quality('Direction','Drawn to a settled, close life over a restless one.')}
+      </div>
+      <div class="chips"><span class="chip">Deeply loyal</span><span class="chip">Home-leaning</span><span class="chip">Slow to trust</span><span class="chip">Good in a crisis</span></div>
+      <div class="stack" style="margin-top:20px;">
+        <button class="btn btn-soft">Refine with Kin</button>
+        <button class="btn btn-soft">See how others see you</button>
+      </div>
+    </div>
+    ${tabbar('profile')}
+  </div>`},
+
+{sec:'Your profile',name:'Desktop dashboard',frame:'desktop',html:`
+  <div class="dash">
+    <div class="lcol">
+      <div class="dbrand" style="letter-spacing:.04em;">First Dates<small>by The School of Life</small></div>
+      <div style="width:74px;height:74px;border-radius:50%;overflow:hidden;border:1px solid var(--line);margin:0 0 16px;">${portrait({sex:'m'})}</div>
+      <h1>Alex</h1>
+      <div class="small" style="margin-bottom:18px;">Your profile, in depth</div>
+      <div class="echo" style="font-size:14px;margin-bottom:20px;">“Warm and quick to laugh, steady when it counts, and a little slow to show the whole of yourself.”</div>
+      <div class="chips"><span class="chip">Deeply loyal</span><span class="chip">Home-leaning</span><span class="chip">Slow to trust</span><span class="chip">Good in a crisis</span></div>
+    </div>
+    <div class="rcol">
+      <div class="dnav"><span class="on">Your profile</span><span>Conversations</span><span>Matches</span><span>Privacy</span></div>
+      <div class="cols2">
+        <div class="panel">
+          <h3>How you move through closeness</h3>
+          ${quality('Warmth','Care shown through doing, not declaring.')}
+          ${quality('Steadiness','The calm one when life turns hard.')}
+          ${quality('Repair','Mends rather than keeps score.')}
+          ${quality('Openness','Some doors stay shut until trust runs deep.')}
+          ${quality('Direction','Leans toward a settled, close life.')}
+        </div>
+        <div class="panel">
+          <h3>What Kin understands about you</h3>
+          <p class="narr">You give warmth easily and are the steady one when life turns hard, the person others reach for in a crisis. You repair rather than hold grudges. Where you hold back is in showing the whole of yourself, you keep some doors closed until trust is deep. The partner who suits you is patient with that, and clear rather than distant when you go quiet.</p>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:22px;">
+        <h3>Your conversations with Kin</h3>
+        <div class="conv-item"><span class="dot2"></span>Getting to know you · 5 questions · 12 June</div>
+        <div class="conv-item"><span class="dot2"></span>Going deeper · the long road · scheduled</div>
+        <div class="conv-item"><span class="dot2"></span>After your date with Maya · reflection</div>
+      </div>
+    </div>
+  </div>`},
+
+/* ---- D. Matching & the date ---- */
+{sec:'Matching & the dates',name:'A match',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">Someone worth meeting</div>
+      <div class="matchcard">
+        <div class="matchphoto">
+          <div class="sil" style="inset:0;">${portrait({sex:'f'})}</div>
+          <div class="meta"><h2>Maya, 31</h2><p>Architect · long walks, cooks for people, very good in a crisis</p></div>
+        </div>
+        <div style="padding:16px 18px;">
+          <div class="signal">◷ Strong early signals with you</div>
+          <p class="body" style="margin:10px 0 0;">You both run warm and steady, and you repair the same way. Kin thinks there is something here worth feeling out.</p>
+        </div>
+      </div>
+    </div>
+    <div class="pad"><button class="btn btn-primary">Send your clone to meet Maya</button><span class="link">Not right now</span></div>
+  </div>`},
+
+{sec:'Matching & the dates',name:'First Date (voice)',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 60% at 50% 0%, #f1ece3, #e6dccd);">
+    ${STATUS}
+    <div style="text-align:center;padding:14px 0 4px;">
+      <div class="small" style="letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);font-weight:600;">First Date &middot; by voice</div>
+      <div class="small" style="color:var(--ink-soft);margin-top:3px;">Maya is talking to your clone</div>
+      <div class="serif" style="font-size:15px;color:var(--accent);margin-top:4px;">4:12 remaining</div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:26px;align-items:center;padding:16px 0 6px;">
+      <div style="text-align:center;"><div class="orb sm" style="margin:0 auto;"></div><div class="small" style="margin-top:8px;">Your clone</div></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div style="display:flex;gap:4px;align-items:center;height:22px;"><span style="width:4px;height:9px;border-radius:3px;background:var(--accent-2);"></span><span style="width:4px;height:18px;border-radius:3px;background:var(--accent-2);"></span><span style="width:4px;height:12px;border-radius:3px;background:var(--accent-2);"></span><span style="width:4px;height:20px;border-radius:3px;background:var(--accent-2);"></span></div>
+        <div class="small" style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);">voice only</div>
+      </div>
+      <div style="text-align:center;"><div style="width:62px;height:62px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.12);margin:0 auto;">${portrait({sex:'f'})}</div><div class="small" style="margin-top:8px;">Maya</div></div>
+    </div>
+    <div class="scrollarea" style="padding:8px 0 14px;display:flex;flex-direction:column;gap:10px;">
+      <div class="bubble" style="margin-left:60px;">Your clone: So, what makes you lose track of time?</div>
+      <div class="bubble" style="margin-right:60px;background:#fbeee6;border:1px solid #f0d9c9;">Maya: Cooking for people I love. Doing this with your clone is a little strange, and I quite like it.</div>
+      <div class="bubble" style="margin-left:60px;">Your clone: What pulls you back to the kitchen, the food or the people?</div>
+    </div>
+    <div class="pad"><button class="btn btn-soft">See how your First Date went</button></div>
+  </div>`},
+
+{sec:'Matching & the dates',name:'After the First Date',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea" style="padding-bottom:14px;">
+      <div class="pad" style="text-align:center;padding-bottom:8px;">
+        <div class="kicker2">After your First Date</div>
+        <div class="ring">
+          <svg width="128" height="128"><circle cx="64" cy="64" r="56" fill="none" stroke="#e9dfca" stroke-width="11"/><circle cx="64" cy="64" r="56" fill="none" stroke="#2f6d6a" stroke-width="11" stroke-linecap="round" stroke-dasharray="351.8" stroke-dashoffset="63.3"/></svg>
+          <div class="num"><b>82</b><span>worth meeting</span></div>
+        </div>
+        <h2 class="t" style="margin-top:16px;">Worth a Second Date</h2>
+        <p class="body" style="text-align:center;">On the things that wear couples down, you and Maya meet easily. Enough to be worth seeing each other on camera.</p>
+      </div>
+      <div style="padding:0 22px 6px;" class="kicker2">Where the two of you meet</div>
+      <div style="padding:0 22px 8px;">
+        ${quality('Warmth','You both run warm and easy together. <em class="meet">You meet here</em>')}
+        ${quality('Steadiness','Two steady people, neither thrown by the other. <em class="meet">You meet here</em>')}
+        ${quality('Repair','You each reach back first after a rupture. <em class="meet">You meet here</em>')}
+        ${quality('Openness','Both a little guarded at the start, the real you takes time. <em class="tend">Worth tending</em>')}
+      </div>
+      <div class="block good"><h4>What Kin noticed</h4><p>Maya warmed to your clone fast. There is an ease here, the thing you cannot manufacture.</p></div>
+      <div class="block watch"><h4>Worth being aware of</h4><p>You are both a little guarded at first. The real you may take a while to arrive.</p><div class="q">If you meet, ask: “What do people find out about you far too late?”</div></div>
+    </div>
+    <div class="pad stack"><button class="btn btn-primary">Arrange your Second Date</button><span class="link" style="margin-top:0;">On camera, your avatar interviews Maya so you can see her</span><button class="btn btn-soft">Not now</button></div>
+  </div>`},
+
+/* ---- Second Date (video) ---- */
+{sec:'Matching & the dates',name:'Second Date invite',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:radial-gradient(120% 80% at 50% 12%, #f6efe6, #ece0d0);">
+    ${STATUS}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 32px;">
+      <div style="display:flex;gap:18px;align-items:center;margin-bottom:24px;"><div style="width:64px;height:64px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.15);">${portrait({sex:'m'})}</div><div class="serif" style="color:var(--ink-soft);">and</div><div style="width:64px;height:64px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.15);">${portrait({sex:'f'})}</div></div>
+      <div class="kicker2">You both said yes</div>
+      <h1 class="t" style="font-size:25px;">Time to be seen</h1>
+      <p class="body" style="text-align:center;">Your First Date went well by voice. Now your avatar, wearing your face, sits down with Maya on camera and asks a fresh, deeper set of questions. About five minutes, recorded, so you can finally see her, hear her, and feel whether the spark is there.</p>
+    </div>
+    <div class="pad stack"><button class="btn btn-primary">Send my avatar in</button><button class="btn btn-soft">Not yet</button></div>
+  </div>`},
+
+{sec:'Matching & the dates',name:'On camera',frame:'phone',chrome:false,html:`
+  <div class="center" style="background:#15120e;position:relative;">
+    ${STATUS_LIGHT}
+    <div style="position:absolute;top:46px;left:0;right:0;display:flex;justify-content:center;gap:9px;align-items:center;z-index:6;">
+      <span style="background:rgba(0,0,0,.45);color:#fff;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:5px 12px;border-radius:999px;">Your avatar interviews Maya</span>
+      <span style="background:rgba(181,83,47,.92);color:#fff;font-size:11px;font-weight:600;padding:5px 12px;border-radius:999px;display:inline-flex;gap:6px;align-items:center;"><span style="width:7px;height:7px;border-radius:50%;background:#fff;"></span>REC 02:13</span>
+    </div>
+    <div style="flex:1;position:relative;overflow:hidden;">
+      <div style="position:absolute;inset:0;">${portrait({sex:'f'})}</div>
+      <div style="position:absolute;left:16px;bottom:128px;color:#fff;font-weight:600;font-size:15px;text-shadow:0 1px 5px rgba(0,0,0,.5);">Maya</div>
+      <div style="position:absolute;right:14px;bottom:128px;width:104px;height:148px;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 10px 22px rgba(0,0,0,.45);">
+        <div style="position:absolute;inset:0;">${portrait({sex:'m'})}</div>
+        <span style="position:absolute;bottom:6px;left:8px;color:#fff;font-size:10px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6);">Your avatar</span>
+      </div>
+      <div style="position:absolute;left:14px;right:14px;bottom:16px;background:rgba(255,253,248,.96);border-radius:14px;padding:12px 15px;box-shadow:0 8px 20px rgba(0,0,0,.3);">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);font-weight:600;margin-bottom:4px;">Your avatar asks Maya · date two</div>
+        <div class="serif" style="font-size:15.5px;line-height:1.3;">What are you like to love on a hard day?</div>
+      </div>
+    </div>
+    <div style="height:84px;flex:none;background:#0e0c0a;display:flex;align-items:center;justify-content:center;gap:20px;">
+      <div style="width:50px;height:50px;border-radius:50%;background:#2a251f;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="#fff" stroke-width="1.8"/><line x1="12" y1="17" x2="12" y2="21" stroke="#fff" stroke-width="1.8"/></svg></div>
+      <div style="width:50px;height:50px;border-radius:50%;background:#2a251f;display:flex;align-items:center;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><path d="M15 8a4 4 0 1 0-6 3.5"/><path d="M23 7l-4 4-4-4"/><path d="M1 17l4-4 4 4" /></svg></div>
+      <div style="width:58px;height:58px;border-radius:50%;background:#c0392b;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(192,57,43,.5);"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg></div>
+    </div>
+  </div>`},
+
+{sec:'Matching & the dates',name:'Watch the date back',frame:'phone',chrome:false,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">Your Second Date</div>
+      <h1 class="t" style="font-size:24px;">Maya, in her own words</h1>
+      <p class="body">Your avatar just interviewed Maya on camera. Watch her back, then decide whether you would like to meet.</p>
+      <div style="border-radius:18px;overflow:hidden;border:1px solid var(--line);position:relative;height:320px;display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;inset:0;">${portrait({sex:'f'})}</div>
+        <div style="position:absolute;width:62px;height:62px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.3);"><svg width="22" height="22" viewBox="0 0 24 24" fill="#1f4e4b"><path d="M8 5v14l11-7z"/></svg></div>
+        <span style="position:absolute;bottom:12px;left:14px;color:#fff;font-size:12px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.5);">Maya · 4:58</span>
+      </div>
+    </div>
+    <div class="pad stack"><button class="btn btn-primary">Yes, I'd like to meet</button><button class="btn btn-soft">Not for me</button></div>
+  </div>`},
+
+{sec:'Matching & the dates',name:"It's mutual",frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad" style="text-align:center;">
+      <div style="display:flex;justify-content:center;gap:16px;align-items:center;margin:20px 0 6px;"><div style="width:66px;height:66px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.18);">${portrait({sex:'m'})}</div><div style="font-size:24px;">🤍</div><div style="width:66px;height:66px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.18);">${portrait({sex:'f'})}</div></div>
+      <div class="kicker2" style="text-align:center;">After your Second Date</div>
+      <h1 class="t">You both want to meet</h1>
+      <p class="body" style="text-align:center;">You watched Maya, and Maya watched your avatar. You both said yes. No guesswork, no wasted Saturday, you already know there is something real here.</p>
+      <div class="block good" style="margin:14px 0 0;"><h4>What carried across on camera</h4><p>Warm, present, and funnier than your profile let on. Maya noticed it too.</p></div>
+    </div>
+    <div class="pad stack"><button class="btn btn-primary">Send Maya a message</button><button class="btn btn-soft">Plan to meet in person</button></div>
+    ${tabbar('match')}
+  </div>`},
+
+/* ---- E. Your companion ---- */
+{sec:'Your companion',name:'You met',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad" style="text-align:center;">
+      <div class="kicker2" style="text-align:center;">In person, at last</div>
+      <div style="display:flex;justify-content:center;gap:14px;align-items:center;margin:16px 0 8px;">
+        <div style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 5px 14px rgba(0,0,0,.16);">${portrait({sex:'m'})}</div>
+        <div style="font-size:22px;">☕</div>
+        <div style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:2px solid #fff;box-shadow:0 5px 14px rgba(0,0,0,.16);">${portrait({sex:'f'})}</div>
+      </div>
+      <h1 class="t">You and Maya met on Saturday</h1>
+      <p class="body" style="text-align:center;">Coffee that turned into a three hour walk. However it went, it helps to talk it through while it is still fresh.</p>
+    </div>
+    <div class="pad stack"><button class="btn btn-primary">Talk it through with Kin</button><button class="btn btn-soft">Later</button></div>
+    ${tabbar('home')}
+  </div>`},
+
+{sec:'Your companion',name:'Reflect together',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div style="text-align:center;padding:12px 0 4px;"><div class="orb sm" style="margin:0 auto;"></div><div class="small" style="margin-top:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);">Your companion</div></div>
+    <div class="scrollarea" style="padding:8px 0 10px;display:flex;flex-direction:column;gap:10px;">
+      <div class="bubble" style="margin-right:48px;">Kin: How did it feel when you said goodbye? Not what you thought, what you felt.</div>
+      <div class="bubble" style="margin-left:48px;background:var(--cream-2);">You: I didn't want it to end. But I keep noticing small things and second-guessing.</div>
+      <div class="bubble" style="margin-right:48px;">Kin: Worth slowing down on. The small things are often the truth arriving early. Which one stayed with you?</div>
+      <div class="block good" style="margin:4px 22px 0;"><h4>What I am noticing</h4><p>That sounds like curiosity, not doubt. There is no rush to decide. I will help you read this clearly, so you neither waste months on the wrong person, nor walk away from the right one too soon.</p></div>
+    </div>
+    <div class="pad"><button class="btn btn-primary">Keep talking</button></div>
+    ${tabbar('kin')}
+  </div>`},
+
+{sec:'Your companion',name:'Through the stages',frame:'phone',chrome:true,html:`
+  <div class="center">
+    ${STATUS}
+    <div class="scrollarea pad">
+      <div class="kicker2">Your companion</div>
+      <h1 class="t" style="font-size:23px;">I'll go with you, stage by stage</h1>
+      <p class="body">The hard part of love is not the first date, it is everything after. I am here for each step, so you spend your time on the right person and not a year on the wrong one.</p>
+      <div style="margin-top:8px;">
+        ${stage('First date, by voice','Done','done')}
+        ${stage('Second date, on camera','Done','done')}
+        ${stage('Meeting in person','Done','done')}
+        ${stage('Early days with Maya','You are here','now')}
+        ${stage('The tenth date, going deeper','Ahead','next')}
+        ${stage('Moving in together','Ahead','next')}
+        ${stage('Stay or leave, if it ever comes','Ahead','next')}
+      </div>
+    </div>
+    ${tabbar('kin')}
+  </div>`}
+];
+
+/* ---------------- shell ---------------- */
+let cur=0;
+const frame=document.getElementById('frame');
+const nav=document.getElementById('nav');
+
+function buildNav(){
+  const groups={};
+  SCREENS.forEach((s,i)=>{(groups[s.sec]=groups[s.sec]||[]).push(i);});
+  nav.innerHTML=Object.entries(groups).map(([sec,idxs])=>`
+    <div class="grp"><h4>${sec}</h4>${idxs.map(i=>`<div class="navitem" data-i="${i}" onclick="jump(${i})"><span class="d"></span>${SCREENS[i].name}</div>`).join('')}</div>`).join('');
+}
+function renderFrame(){
+  const s=SCREENS[cur];
+  if(s.frame==='desktop'){
+    frame.innerHTML=`<div class="desktop"><div class="dtbar"><i></i><i></i><i></i><div class="url">app.firstdates.life / profile</div></div><div class="dtscreen">${s.html}</div></div>`;
+  } else {
+    frame.innerHTML=`<div class="phone"><div class="notch"></div><div class="screen">${s.html}</div></div>`;
+  }
+  document.getElementById('count').textContent=`${cur+1} / ${SCREENS.length}`;
+  document.getElementById('screenlabel').innerHTML=`${s.sec} &nbsp;·&nbsp; <b>${s.name}</b>`;
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',+n.dataset.i===cur));
+  wireAdvance();
+}
+
+function wireAdvance(){
+  const oldCue=document.querySelector('.tapcue'); if(oldCue) oldCue.remove();
+  // each in-product control advances to the next screen
+  frame.querySelectorAll('.btn,.choice,.matchcard,.micbtn,.tab').forEach(el=>{
+    el.classList.add('clickable');
+    el.addEventListener('click',e=>{ e.stopPropagation(); go(1); });
+  });
+  // screens with no primary button (and not the last screen): click anywhere continues
+  if(!frame.querySelector('.btn') && cur < SCREENS.length-1){
+    const sc=frame.querySelector('.screen,.dtscreen');
+    if(sc){ sc.classList.add('clickable'); sc.addEventListener('click',()=>go(1)); }
+    const cue=document.createElement('div'); cue.className='tapcue'; cue.textContent='click anywhere to continue ›';
+    document.querySelector('.canvas').appendChild(cue);
+  }
+}
+function go(d){ cur=Math.max(0,Math.min(SCREENS.length-1,cur+d)); renderFrame(); }
+function jump(i){ cur=i; renderFrame(); }
+window.addEventListener('keydown',e=>{ if(e.key==='ArrowRight')go(1); if(e.key==='ArrowLeft')go(-1); });
+buildNav(); renderFrame();
+</script>
+</body>
+</html>
