@@ -129,9 +129,9 @@
 <script>
 /* ============================================================
    First Dates - voice profiling -> clone
-   Kin asks a few questions aloud. Each spoken answer is read by
-   Kin + Claude (live) or simulated. The answers accumulate
-   into a clone, synthesised by Claude.
+   Kin asks a few questions aloud. Each spoken answer is read
+   live or simulated. The answers accumulate
+   into a clone, synthesised by Kin.
 ============================================================ */
 
 const ANALYZE_URL = '/api/analyze';
@@ -160,12 +160,12 @@ function toggleDebug(){
   if(d.style.display!=='none'){ d.style.display='none'; return; }
   d.innerHTML = turns.map((t,i)=>{
     const v = (t.raw && t.raw.velma) ? JSON.stringify(t.raw.velma,null,2) : (t.raw && t.raw.__fail) ? ('NOT LIVE - '+t.raw.__fail+'\nrecorded blob: '+t.raw.blobBytes+' bytes, type '+t.raw.blobType) : '(simulated answer - no live data)';
-    const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Claude read for this answer)';
-    const ce = (t.raw && t.raw.interpErr) ? ('\n\nClaude error: ' + t.raw.interpErr) : '';
+    const ci = (t.raw && t.raw.interpreted) ? JSON.stringify(t.raw.interpreted,null,2) : '(no Kin read for this answer)';
+    const ce = (t.raw && t.raw.interpErr) ? ('\n\nKin error: ' + t.raw.interpErr) : '';
     return `<div class="sectlabel">Answer ${i+1} · ${esc(t.q)}</div>
       <div class="hint" style="text-align:left;margin:0 0 4px;">What Kin heard</div>
       <pre class="dbg">${esc(v)}</pre>
-      <div class="hint" style="text-align:left;margin:8px 0 4px;">What Claude wrote from it</div>
+      <div class="hint" style="text-align:left;margin:8px 0 4px;">What Kin made of it</div>
       <pre class="dbg">${esc(ci + ce)}</pre>`;
   }).join('');
   d.style.display='block';
@@ -181,7 +181,7 @@ async function speak(text,onend){
   stopSpeak();
   if(!voiceOn || !text){ if(onend) setTimeout(onend,120); return; }
   let settled=false; const finish=(cb)=>{ if(settled) return; settled=true; if(cb) cb(); else if(onend) onend(); };
-  // Prefer a natural ElevenLabs voice from the server; fall back to the browser voice.
+  // Prefer a natural voice from the server, fall back to the browser voice.
   try{
     const res=await fetch(TTS_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
     const ct=res.headers.get('content-type')||'';
@@ -475,7 +475,7 @@ function screenClone(c){
   speak(c.profileLine || 'Here is the version of you I built.');
 }
 
-/* ---------- Claude read -> render shape ---------- */
+/* ---------- read -> render shape ---------- */
 function fromInterpreted(i){
   return {
     emotions:(i.emotions||[]).filter(e=>e&&e.label).map(e=>({label:e.label,score:typeof e.score==='number'?e.score:0.65})),
@@ -519,7 +519,7 @@ async function checkServer(){
     const r=await fetch(ANALYZE_URL); const d=await r.json();
     const el=document.getElementById('srv'); if(!el) return;
     if(d && d.velmaKey){ el.textContent='Kin ready'+(d.llmKey?' · deep read on':'')+(d.ttsKey?' · voice on':' · browser voice'); el.style.color='var(--good)'; }
-    else { el.textContent='Kin is not connected - set MODULATE_API_KEY and redeploy'; el.style.color='#a9762a'; }
+    else { el.textContent='Kin is not connected, add the API keys and redeploy'; el.style.color='#a9762a'; }
   }catch(e){}
 }
 screenWelcome(); setBadge(false); checkServer();
